@@ -1,0 +1,15 @@
+{
+  "name": "jeux-societe",
+  "version": "1.0.0",
+  "description": "Application Jeux de société pour gérer joueurs, jeux et scores",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.11.1",
+    "body-parser": "^1.20.2"
+  }
+}

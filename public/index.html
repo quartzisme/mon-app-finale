@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mes jeux de société</title>
+</head>
+<body>
+  <h1>Mes jeux de société</h1>
+  
+  <label>Nom :</label><br>
+  <input id="nom" placeholder="Nom du jeu"><br>
+
+  <label>Min joueurs :</label><br>
+  <input id="min" type="number" placeholder="Min joueurs"><br>
+
+  <label>Max joueurs :</label><br>
+  <input id="max" type="number" placeholder="Max joueurs"><br>
+
+  <label>Temps minimum (minutes):</label><br>
+  <input id="temps_min" type="number" placeholder="Temps min"><br>
+
+  <label>Temps maximum (minutes):</label><br>
+  <input id="temps_max" type="number" placeholder="Temps max"><br>
+
+  <label>Extensions:</label><br>
+  <input id="ext" placeholder="Extensions"><br>
+
+  <label>Statut:</label><br>
+  <input id="statut" placeholder="À vendre / Vendu"><br><br>
+
+  <button onclick="ajouterJeu()">Ajouter</button>
+
+  <h2>Liste des jeux</h2>
+  <ul id="listeJeux"></ul>
+
+  <script src="app.js"></script>
+</body>
+</html>
