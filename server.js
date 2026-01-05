@@ -20,6 +20,52 @@ const db = new sqlite3.Database(dbPath, (err) => {
     else console.log("DB connectée :", dbPath);
 });
 
+const sqlite3 = require('sqlite3').verbose();
+
+const db = new sqlite3.Database('./database.db', (err) => {
+    if (err) {
+        console.error(err.message);
+    } else {
+        console.log('Connecté à la base de données SQLite');
+    }
+});
+
+/* ==============================
+   CRÉATION DES TABLES AU DÉMARRAGE
+   ============================== */
+db.serialize(() => {
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS joueurs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            image TEXT
+        )
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS jeux (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL
+        )
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            joueur_id INTEGER,
+            jeu_id INTEGER,
+            score INTEGER,
+            date TEXT,
+            FOREIGN KEY(joueur_id) REFERENCES joueurs(id),
+            FOREIGN KEY(jeu_id) REFERENCES jeux(id)
+        )
+    `);
+
+    console.log("✅ Tables SQLite vérifiées / créées");
+});
+
+
 // ============================
 // MENU PRINCIPAL
 // ============================
@@ -353,7 +399,7 @@ app.get("/filtrages/liste",(req,res)=>{
 // ============================
 // SERVER
 // ============================
-const PORT = process.env.PORT || 3000;  // Render fournira le PORT
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 10000; // 10000 est le port par défaut de Render
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Serveur démarré sur le port ${PORT}`);
 });
