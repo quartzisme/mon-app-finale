@@ -273,49 +273,73 @@ app.post("/jeux/gerer", (req,res) => {
 // ============================
 // SCORES
 // ============================
-app.get("/scores/ajouter", (req,res)=>{
-    db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux)=>{
-        if(err) return res.send(renderPage("Erreur DB", err.message));
-        db.all("SELECT id, nom FROM joueurs ORDER BY nom COLLATE NOCASE", [], (err2, joueurs)=>{
-            if(err2) return res.send(renderPage("Erreur DB", err2.message));
-            let content = `<form method="POST" action="/scores/ajouter">
-                           <label>Jeu :</label>
-                           <select name="jeu_id" required>`;
-            jeux.forEach(j=>content+=`<option value="${j.id}">${j.nom}</option>`);
-            content += `</select>
-                        <label>Joueur :</label>
-                        <select name="joueur_id" id="joueurSelect" required>
-                            <option value="">-- Choisir un joueur --</option>`;
-            joueurs.forEach(j=>content+=`<option value="${j.id}" data-nom="${j.nom}">${j.nom}</option>`);
-            content += `</select>
-                        <div id="carteJoueur" style="margin-top:20px;"></div>
-                        <label>Score :</label>
-                        <input type="number" step="0.5" name="score" required>
-                        <button type="submit">Enregistrer le score</button>
-                        </form>
-                        <a href="/">⬅ Retour</a>
-                        <script>
-                        const select = document.getElementById("joueurSelect");
-                        const carteDiv = document.getElementById("carteJoueur");
-                        select.addEventListener("change", ()=>{
-                            const opt = select.options[select.selectedIndex];
-                            const nom = opt.getAttribute("data-nom");
-                            carteDiv.innerHTML = nom ? '<img src="/images/'+nom+'.jpg" alt="Carte '+nom+'" style="max-width:300px;border:1px solid #333;">' : '';
-                        });
-                        </script>`;
+app.get("/scores/ajouter", (req, res) => {
+    db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
+        if (err) return res.send(renderPage("Erreur DB", err.message));
+
+        db.all("SELECT id, nom FROM joueurs ORDER BY nom COLLATE NOCASE", [], (err2, joueurs) => {
+            if (err2) return res.send(renderPage("Erreur DB", err2.message));
+
+            let content = `
+                <form method="POST" action="/scores/ajouter">
+                    <label>Jeu :</label>
+                    <select name="jeu_id" required>
+                        ${jeux.map(j => `<option value="${j.id}">${j.nom}</option>`).join("")}
+                    </select>
+
+                    <label>Joueur :</label>
+                    <select name="joueur_id" id="joueurSelect" required>
+                        <option value="">-- Choisir un joueur --</option>
+                        ${joueurs.map(j => `<option value="${j.id}" data-nom="${j.nom}">${j.nom}</option>`).join("")}
+                    </select>
+
+                    <div id="carteJoueur" style="margin-top:20px;"></div>
+
+                    <label>Score :</label>
+                    <input type="number" step="0.5" name="score" required>
+
+                    <button type="submit">Enregistrer le score</button>
+                </form>
+
+                <a href="/">⬅ Retour</a>
+
+                <script>
+                    const select = document.getElementById("joueurSelect");
+                    const carteDiv = document.getElementById("carteJoueur");
+                    select.addEventListener("change", () => {
+                        const opt = select.options[select.selectedIndex];
+                        const nom = opt.getAttribute("data-nom");
+                        carteDiv.innerHTML = nom ? '<img src="/images/' + nom + '.jpg" alt="Carte ' + nom + '" style="max-width:300px;border:1px solid #333;">' : '';
+                    });
+                </script>
+            `;
+
             res.send(renderPage("Donner un score", content));
         });
     });
 });
 
-app.post("/scores/ajouter", (req,res)=>{
+app.post("/scores/ajouter", (req, res) => {
     const { jeu_id, joueur_id, score } = req.body;
-    if(!jeu_id||!joueur_id||!score) return res.send(renderPage("Erreur", "Veuillez remplir tous les champs."));
-    db.run("INSERT INTO scores (jeu_id,joueur_id,score) VALUES (?,?,?)", [jeu_id,joueur_id,score], err=>{
-        if(err) return res.send(renderPage("Erreur DB", err.message));
-        res.send(renderPage("✅ Score enregistré", `<a href="/scores/ajouter">Ajouter un autre score</a><br><a href="/">⬅ Retour</a>`));
-    });
+    if (!jeu_id || !joueur_id || !score) {
+        return res.send(renderPage("Erreur", "Veuillez remplir tous les champs."));
+    }
+
+    db.run(
+        "INSERT INTO scores (jeu_id, joueur_id, score) VALUES (?, ?, ?)",
+        [jeu_id, joueur_id, score],
+        err => {
+            if (err) return res.send(renderPage("Erreur DB", err.message));
+            res.send(
+                renderPage(
+                    "✅ Score enregistré",
+                    `<a href="/scores/ajouter">Ajouter un autre score</a><br><a href="/">⬅ Retour</a>`
+                )
+            );
+        }
+    );
 });
+
 
 // ============================
 // MEILLEURS ET PIRES JEUX
