@@ -21,10 +21,47 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 // ============================
+// CRÉATION DES TABLES SI INEXISTANTES
+// ============================
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS joueurs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT NOT NULL UNIQUE
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS jeux (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT NOT NULL,
+        extensions TEXT,
+        min_joueurs INTEGER,
+        max_joueurs INTEGER,
+        temps_min INTEGER,
+        temps_max INTEGER,
+        statut TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        jeu_id INTEGER NOT NULL,
+        joueur_id INTEGER NOT NULL,
+        score REAL NOT NULL,
+        FOREIGN KEY (jeu_id) REFERENCES jeux(id),
+        FOREIGN KEY (joueur_id) REFERENCES joueurs(id)
+    )`);
+});
+
+// ============================
 // MENU PRINCIPAL
 // ============================
 app.get("/", (req, res) => {
     let html = `
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-size: 20px; line-height: 1.6; font-family: Arial, sans-serif; margin: 10px; }
+        h1, h2 { font-size: 1.8em; }
+        ul, li { font-size: 18px; }
+        a, button { font-size: 18px; padding: 8px; }
+    </style>
     <h1>🎲 Jeux de Société</h1>
     <ul>
         <li><a href="/joueurs">1) Les joueurs</a></li>
@@ -37,6 +74,7 @@ app.get("/", (req, res) => {
     `;
     res.send(html);
 });
+
 
 // ============================
 // GESTION JOUEURS
@@ -353,5 +391,7 @@ app.get("/filtrages/liste",(req,res)=>{
 // ============================
 // SERVER
 // ============================
-const PORT = 3000;
-app.listen(PORT, ()=>console.log(`Server running on http://localhost:${PORT}`));
+const PORT = process.env.PORT || 10000; // 10000 est le port par défaut de Render
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Serveur démarré sur le port ${PORT}`);
+});
