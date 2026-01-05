@@ -55,6 +55,13 @@ db.serialize(() => {
 // ============================
 app.get("/", (req, res) => {
     let html = `
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-size: 20px; line-height: 1.6; font-family: Arial, sans-serif; margin: 10px; }
+        h1, h2 { font-size: 1.8em; }
+        ul, li { font-size: 18px; }
+        a, button { font-size: 18px; padding: 8px; }
+    </style>
     <h1>🎲 Jeux de Société</h1>
     <ul>
         <li><a href="/joueurs">1) Les joueurs</a></li>
@@ -67,6 +74,7 @@ app.get("/", (req, res) => {
     `;
     res.send(html);
 });
+
 
 // ============================
 // GESTION JOUEURS
