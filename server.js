@@ -20,51 +20,35 @@ const db = new sqlite3.Database(dbPath, (err) => {
     else console.log("DB connectée :", dbPath);
 });
 
-const sqlite3 = require('sqlite3').verbose();
-
-const db = new sqlite3.Database('./database.db', (err) => {
-    if (err) {
-        console.error(err.message);
-    } else {
-        console.log('Connecté à la base de données SQLite');
-    }
-});
-
-/* ==============================
-   CRÉATION DES TABLES AU DÉMARRAGE
-   ============================== */
+// ============================
+// CRÉATION DES TABLES SI INEXISTANTES
+// ============================
 db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS joueurs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT NOT NULL UNIQUE
+    )`);
 
-    db.run(`
-        CREATE TABLE IF NOT EXISTS joueurs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT NOT NULL,
-            image TEXT
-        )
-    `);
+    db.run(`CREATE TABLE IF NOT EXISTS jeux (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT NOT NULL,
+        extensions TEXT,
+        min_joueurs INTEGER,
+        max_joueurs INTEGER,
+        temps_min INTEGER,
+        temps_max INTEGER,
+        statut TEXT
+    )`);
 
-    db.run(`
-        CREATE TABLE IF NOT EXISTS jeux (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT NOT NULL
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS scores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            joueur_id INTEGER,
-            jeu_id INTEGER,
-            score INTEGER,
-            date TEXT,
-            FOREIGN KEY(joueur_id) REFERENCES joueurs(id),
-            FOREIGN KEY(jeu_id) REFERENCES jeux(id)
-        )
-    `);
-
-    console.log("✅ Tables SQLite vérifiées / créées");
+    db.run(`CREATE TABLE IF NOT EXISTS scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        jeu_id INTEGER NOT NULL,
+        joueur_id INTEGER NOT NULL,
+        score REAL NOT NULL,
+        FOREIGN KEY (jeu_id) REFERENCES jeux(id),
+        FOREIGN KEY (joueur_id) REFERENCES joueurs(id)
+    )`);
 });
-
 
 // ============================
 // MENU PRINCIPAL
