@@ -392,7 +392,10 @@ app.get("/filtrages/liste",(req,res)=>{
 });
 
 
-const PORT = process.env.PORT || 10000; 
+// ============================
+// SERVER
+// ============================
+const PORT = process.env.PORT || 10000; // 10000 est le port par défaut de Render
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Serveur démarré sur le port ${PORT}`);
 });
