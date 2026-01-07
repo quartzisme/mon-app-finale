@@ -302,7 +302,6 @@ app.get("/scores/ajouter", (req,res)=>{
                     <label>Joueur :</label><br>
                     <select name="joueur_id" id="joueurSelect" required>
                       <option value="">-- Choisir un joueur --</option>`;
-            joueurs.forEach(j=>html+=`<option value="${j.id}" data-nom="${j.nom}">${j.nom}</option>`);
             html+=`</select>
                    <div id="carteJoueur" style="margin-top:20px;"></div>
                    <br><label>Score :</label><br>
@@ -337,6 +336,7 @@ app.post("/scores/ajouter", (req,res)=>{
 // MEILLEURS ET PIRES JEUX
 // ============================
 function topJeux(route, order){
+    // Page pour choisir le joueur
     app.get(route, (req,res)=>{
         db.all("SELECT id, nom FROM joueurs ORDER BY nom COLLATE NOCASE", [], (err,joueurs)=>{
             if(err) return res.send(renderPage("Erreur DB", err.message));
@@ -346,29 +346,53 @@ function topJeux(route, order){
                         <select name="joueur_id">
                             <option value="">-- Tous les joueurs --</option>`;
             joueurs.forEach(j=>html+=`<option value="${j.id}">${j.nom}</option>`);
-            html+=`</select><button type="submit">Voir Top 10</button></form>
+            html+=`</select>
+                   <button type="submit">Voir Top 10</button>
+                   </form>
                    <a href="/">⬅ Retour</a>`;
             res.send(renderPage(route.includes("meilleurs")?"Meilleurs jeux":"Pires jeux", html));
         });
     });
+
+    // Page du Top 10
     app.get(route+"/liste",(req,res)=>{
         const joueur_id = req.query.joueur_id;
         let sql = `SELECT j.nom, AVG(s.score) AS moyenne FROM jeux j 
-                   LEFT JOIN scores s ON j.id=s.jeu_id`;
+                   LEFT JOIN scores s ON j.id=s.jeu_id WHERE 1=1`;
         let params = [];
         if(joueur_id) { sql += " AND s.joueur_id=?"; params.push(joueur_id); }
         sql += " GROUP BY j.id ORDER BY moyenne "+order+" LIMIT 10";
+
         db.all(sql, params, (err, rows)=>{
             if(err) return res.send(renderPage("Erreur DB", err.message));
-            let html = `<h2>Top 10</h2><table><tr><th>Jeu</th><th>Moyenne</th></tr>`;
-            rows.forEach(r=>html+=`<tr><td>${r.nom}</td><td>${r.moyenne||"–"}</td></tr>`);
-            html+=`</table><a href="${route}">⬅ Retour</a>`;
-            res.send(renderPage("Top 10", html));
+
+            if(joueur_id){
+                // Si un joueur est choisi, récupérer son nom pour afficher sa carte
+                db.get("SELECT nom FROM joueurs WHERE id=?", [joueur_id], (err2, row)=>{
+                    if(err2 || !row) return res.send(renderPage("Top 10", "Erreur lors de la récupération du joueur"));
+                    let nomJoueur = row.nom;
+                    let html = `<h2>${route.includes("meilleurs")?"🏆 Top 10":"💀 Pire 10"} - ${nomJoueur}</h2>
+                                <img src="/images/${nomJoueur}.jpg" alt="Carte ${nomJoueur}" style="max-width:300px;border:1px solid #333;margin-bottom:20px;">
+                                <table border="1" cellpadding="5"><tr><th>Jeu</th><th>Moyenne</th></tr>`;
+                    rows.forEach(r=>html+=`<tr><td>${r.nom}</td><td>${r.moyenne!=null?r.moyenne.toFixed(1):"–"}</td></tr>`);
+                    html += `</table><a href="${route}">⬅ Retour</a>`;
+                    res.send(renderPage("Top 10", html));
+                });
+            } else {
+                // Si aucun joueur sélectionné
+                let html = `<h2>${route.includes("meilleurs")?"🏆 Top 10":"💀 Pire 10"} - Tous les joueurs</h2>
+                            <table border="1" cellpadding="5"><tr><th>Jeu</th><th>Moyenne</th></tr>`;
+                rows.forEach(r=>html+=`<tr><td>${r.nom}</td><td>${r.moyenne!=null?r.moyenne.toFixed(1):"–"}</td></tr>`);
+                html += `</table><a href="${route}">⬅ Retour</a>`;
+                res.send(renderPage("Top 10", html));
+            }
         });
     });
 }
+
 topJeux("/meilleurs-jeux", "DESC");
 topJeux("/pires-jeux", "ASC");
+
 
 // ============================
 // FILTRAGES
