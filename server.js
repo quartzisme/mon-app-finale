@@ -21,6 +21,34 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 // ============================
+// FONCTION GÉNÉRIQUE POUR RENDRE UNE PAGE
+// ============================
+function renderPage(title, content) {
+    return `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+        <style>
+            body { font-size: 20px; line-height: 1.6; font-family: Arial, sans-serif; margin: 10px; }
+            h1, h2 { font-size: 1.8em; }
+            ul, li { font-size: 18px; }
+            a, button { font-size: 18px; padding: 8px; text-decoration: none; display: inline-block; margin: 4px 0; }
+            input, select { font-size: 18px; padding: 4px; margin: 4px 0; width: 100%; max-width: 300px; }
+            table { font-size: 18px; border-collapse: collapse; width: 100%; }
+            th, td { padding: 6px; border: 1px solid #333; text-align: left; }
+        </style>
+    </head>
+    <body>
+        ${content}
+    </body>
+    </html>
+    `;
+}
+
+// ============================
 // CRÉATION DES TABLES SI INEXISTANTES
 // ============================
 db.serialize(() => {
@@ -54,34 +82,26 @@ db.serialize(() => {
 // MENU PRINCIPAL
 // ============================
 app.get("/", (req, res) => {
-    let html = `
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { font-size: 20px; line-height: 1.6; font-family: Arial, sans-serif; margin: 10px; }
-        h1, h2 { font-size: 1.8em; }
-        ul, li { font-size: 18px; }
-        a, button { font-size: 18px; padding: 8px; }
-    </style>
+    const html = `
     <h1>🎲 Jeux de Société</h1>
     <ul>
-        <li><a href="/joueurs">1) Les joueurs</a></li>
-        <li><a href="/jeux/menu">2) Les jeux de société</a></li>
-        <li><a href="/scores/ajouter">3) Donner un score</a></li>
-        <li><a href="/meilleurs-jeux">4) Les meilleurs jeux</a></li>
-        <li><a href="/pires-jeux">5) Les pires jeux</a></li>
-        <li><a href="/filtrages">6) Filtrages</a></li>
+        <li><a href="/joueurs">Les joueurs</a></li>
+        <li><a href="/jeux/menu">Les jeux de société</a></li>
+        <li><a href="/scores/ajouter">Donner un score</a></li>
+        <li><a href="/meilleurs-jeux">Les meilleurs jeux</a></li>
+        <li><a href="/pires-jeux">Les pires jeux</a></li>
+        <li><a href="/filtrages">Filtrages</a></li>
     </ul>
     `;
-    res.send(html);
+    res.send(renderPage("Menu principal", html));
 });
-
 
 // ============================
 // GESTION JOUEURS
 // ============================
 app.get("/joueurs", (req, res) => {
     db.all("SELECT * FROM joueurs ORDER BY id", [], (err, rows) => {
-        if (err) return res.send("Erreur DB : " + err.message);
+        if (err) return res.send(renderPage("Erreur DB", err.message));
 
         let html = `<h2>Gestion des joueurs</h2><ul>`;
         rows.forEach((row) => {
@@ -96,33 +116,34 @@ app.get("/joueurs", (req, res) => {
                     <li><a href="/joueurs/supprimer">Supprimer un joueur</a></li>
                  </ul>
                  <a href="/">⬅ Retour au menu</a>`;
-        res.send(html);
+        res.send(renderPage("Gestion des joueurs", html));
     });
 });
 
 app.get("/joueurs/ajouter", (req, res) => {
-    res.send(`
+    const html = `
         <h2>Ajouter un joueur</h2>
         <form method="POST" action="/joueurs/ajouter">
             <label>Nom du joueur : <input type="text" name="nom" required></label>
             <button type="submit">Ajouter</button>
         </form>
         <a href='/joueurs'>⬅ Retour</a>
-    `);
+    `;
+    res.send(renderPage("Ajouter un joueur", html));
 });
 
 app.post("/joueurs/ajouter", (req, res) => {
     const nom = req.body.nom.trim();
-    if (!nom) return res.send("Nom vide ! <a href='/joueurs/ajouter'>Réessayer</a>");
+    if (!nom) return res.send(renderPage("Erreur", "Nom vide ! <a href='/joueurs/ajouter'>Réessayer</a>"));
     db.run("INSERT INTO joueurs (nom) VALUES (?)", [nom], function(err) {
-        if (err) return res.send("Erreur DB : " + err.message);
+        if (err) return res.send(renderPage("Erreur DB", err.message));
         res.redirect("/joueurs");
     });
 });
 
 app.get("/joueurs/modifier", (req, res) => {
     db.all("SELECT * FROM joueurs ORDER BY id", [], (err, rows) => {
-        if (err) return res.send("Erreur DB : " + err.message);
+        if (err) return res.send(renderPage("Erreur DB", err.message));
         let html = `<h2>Modifier un joueur</h2>
                     <form method='POST' action='/joueurs/modifier'>
                         <label>Choisir le joueur :
@@ -132,23 +153,23 @@ app.get("/joueurs/modifier", (req, res) => {
                  <label>Nouveau nom : <input type='text' name='nouveau_nom' required></label><br>
                  <button type='submit'>Modifier</button>
                  </form><a href='/joueurs'>⬅ Retour</a>`;
-        res.send(html);
+        res.send(renderPage("Modifier un joueur", html));
     });
 });
 
 app.post("/joueurs/modifier", (req, res) => {
     const id = req.body.id;
     const nouveau_nom = req.body.nouveau_nom.trim();
-    if (!nouveau_nom) return res.send("Nom vide ! <a href='/joueurs/modifier'>Réessayer</a>");
+    if (!nouveau_nom) return res.send(renderPage("Erreur", "Nom vide ! <a href='/joueurs/modifier'>Réessayer</a>"));
     db.run("UPDATE joueurs SET nom=? WHERE id=?", [nouveau_nom, id], err => {
-        if (err) return res.send("Erreur DB : " + err.message);
+        if (err) return res.send(renderPage("Erreur DB", err.message));
         res.redirect("/joueurs");
     });
 });
 
 app.get("/joueurs/supprimer", (req, res) => {
     db.all("SELECT * FROM joueurs ORDER BY id", [], (err, rows) => {
-        if (err) return res.send("Erreur DB : " + err.message);
+        if (err) return res.send(renderPage("Erreur DB", err.message));
         let html = `<h2>Supprimer un joueur</h2>
                     <form method='POST' action='/joueurs/supprimer'>
                         <label>Choisir le joueur :
@@ -156,13 +177,13 @@ app.get("/joueurs/supprimer", (req, res) => {
         rows.forEach(r => html += `<option value='${r.id}'>${r.nom}</option>`);
         html += `</select></label><br>
                  <button type='submit'>Supprimer</button></form><a href='/joueurs'>⬅ Retour</a>`;
-        res.send(html);
+        res.send(renderPage("Supprimer un joueur", html));
     });
 });
 
 app.post("/joueurs/supprimer", (req, res) => {
     db.run("DELETE FROM joueurs WHERE id=?", [req.body.id], err => {
-        if (err) return res.send("Erreur DB : " + err.message);
+        if (err) return res.send(renderPage("Erreur DB", err.message));
         res.redirect("/joueurs");
     });
 });
@@ -171,14 +192,15 @@ app.post("/joueurs/supprimer", (req, res) => {
 // GESTION JEUX
 // ============================
 app.get("/jeux/menu", (req, res) => {
-    res.send(`
+    const html = `
         <h2>🎲 Jeux de société</h2>
         <ul>
             <li><a href="/jeux/liste">La liste des jeux</a></li>
             <li><a href="/jeux/gerer">Saisir / Modifier un jeu</a></li>
         </ul>
         <a href="/">⬅ Retour au menu</a>
-    `);
+    `;
+    res.send(renderPage("Jeux de société", html));
 });
 
 app.get("/jeux/liste", (req, res) => {
@@ -191,9 +213,9 @@ app.get("/jeux/liste", (req, res) => {
     ORDER BY j.nom COLLATE NOCASE
     `;
     db.all(sql, [], (err, rows) => {
-        if(err) return res.send("Erreur DB : " + err.message);
+        if(err) return res.send(renderPage("Erreur DB", err.message));
         let html = `<h2>Liste des jeux</h2>
-                    <table border="1" cellpadding="5"><tr>
+                    <table><tr>
                         <th>Nom</th><th>Extensions</th><th>Min joueurs</th><th>Max joueurs</th>
                         <th>Temps min</th><th>Temps max</th><th>Statut</th><th>Moyenne score</th>
                     </tr>`;
@@ -210,13 +232,16 @@ app.get("/jeux/liste", (req, res) => {
                      </tr>`;
         });
         html += `</table><a href="/jeux/menu">⬅ Retour</a>`;
-        res.send(html);
+        res.send(renderPage("Liste des jeux", html));
     });
 });
 
+// ============================
+// Gestion de /jeux/gerer POST et GET
+// ============================
 app.get("/jeux/gerer", (req,res) => {
     db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
-        if(err) return res.send("Erreur DB : " + err.message);
+        if(err) return res.send(renderPage("Erreur DB", err.message));
         let html = `<h2>Saisir ou modifier un jeu</h2>
                     <form method="POST" action="/jeux/gerer">
                     <label>Jeu :</label><select name="jeu_id"><option value="">-- Nouveau jeu --</option>`;
@@ -232,7 +257,7 @@ app.get("/jeux/gerer", (req,res) => {
                  <button type="submit" name="action" value="enregistrer">Enregistrer</button>
                  <button type="submit" name="action" value="supprimer">Supprimer</button>
                  </form><a href="/jeux/menu">⬅ Retour</a>`;
-        res.send(html);
+        res.send(renderPage("Saisir/Modifier un jeu", html));
     });
 });
 
@@ -242,20 +267,20 @@ app.post("/jeux/gerer", (req,res) => {
         if(jeu_id){
             db.run("UPDATE jeux SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
                    [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id], err=>{
-                       if(err) return res.send("Erreur DB : "+err.message);
+                       if(err) return res.send(renderPage("Erreur DB", err.message));
                        res.redirect("/jeux/gerer");
                    });
         }else{
-            db.run("INSERT INTO jeux (nom, extensions,min_joueurs,max_joueurs,temps_min,temps_max,statut) VALUES (?,?,?,?,?,?,?)",
+            db.run("INSERT INTO jeux (nom, extensions,min_joueurs,max_joueurs,temps_min,temps_max,statut) VALUES (?,?,?,?,?,?,?,?)",
                    [nom, extensions,min_joueurs,max_joueurs,temps_min,temps_max,statut], err=>{
-                       if(err) return res.send("Erreur DB : "+err.message);
+                       if(err) return res.send(renderPage("Erreur DB", err.message));
                        res.redirect("/jeux/gerer");
                    });
         }
     } else if(action==="supprimer"){
-        if(!jeu_id) return res.send("Veuillez sélectionner un jeu.");
+        if(!jeu_id) return res.send(renderPage("Erreur", "Veuillez sélectionner un jeu."));
         db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err=>{
-            if(err) return res.send("Erreur DB : "+err.message);
+            if(err) return res.send(renderPage("Erreur DB", err.message));
             res.redirect("/jeux/gerer");
         });
     }
@@ -266,9 +291,9 @@ app.post("/jeux/gerer", (req,res) => {
 // ============================
 app.get("/scores/ajouter", (req,res)=>{
     db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux)=>{
-        if(err) return res.send("Erreur DB : "+err.message);
+        if(err) return res.send(renderPage("Erreur DB", err.message));
         db.all("SELECT id, nom FROM joueurs ORDER BY nom COLLATE NOCASE", [], (err2, joueurs)=>{
-            if(err2) return res.send("Erreur DB : "+err2.message);
+            if(err2) return res.send(renderPage("Erreur DB", err2.message));
             let html = `<h2>Donner un score</h2>
                         <form method="POST" action="/scores/ajouter">
                         <label>Jeu :</label><br><select name="jeu_id" required>`;
@@ -294,17 +319,17 @@ app.get("/scores/ajouter", (req,res)=>{
                         carteDiv.innerHTML = nom ? '<img src="/images/'+nom+'.jpg" alt="Carte '+nom+'" style="max-width:300px;border:1px solid #333;">' : '';
                      });
                    </script>`;
-            res.send(html);
+            res.send(renderPage("Donner un score", html));
         });
     });
 });
 
 app.post("/scores/ajouter", (req,res)=>{
     const { jeu_id, joueur_id, score } = req.body;
-    if(!jeu_id||!joueur_id||!score) return res.send("Veuillez remplir tous les champs.");
+    if(!jeu_id||!joueur_id||!score) return res.send(renderPage("Erreur", "Veuillez remplir tous les champs."));
     db.run("INSERT INTO scores (jeu_id,joueur_id,score) VALUES (?,?,?)", [jeu_id,joueur_id,score], err=>{
-        if(err) return res.send("Erreur DB : "+err.message);
-        res.send(`<p>✅ Score enregistré !</p><a href="/scores/ajouter">Ajouter un autre score</a><br><a href="/">⬅ Retour</a>`);
+        if(err) return res.send(renderPage("Erreur DB", err.message));
+        res.send(renderPage("Score enregistré", `<p>✅ Score enregistré !</p><a href="/scores/ajouter">Ajouter un autre score</a><br><a href="/">⬅ Retour</a>`));
     });
 });
 
@@ -314,7 +339,7 @@ app.post("/scores/ajouter", (req,res)=>{
 function topJeux(route, order){
     app.get(route, (req,res)=>{
         db.all("SELECT id, nom FROM joueurs ORDER BY nom COLLATE NOCASE", [], (err,joueurs)=>{
-            if(err) return res.send("Erreur DB : "+err.message);
+            if(err) return res.send(renderPage("Erreur DB", err.message));
             let html = `<h2>${route.includes("meilleurs")?"🏆 Meilleurs jeux":"💀 Pires jeux"}</h2>
                         <form method="GET" action="${route}/liste">
                         <label>Choisir un joueur : </label>
@@ -323,33 +348,33 @@ function topJeux(route, order){
             joueurs.forEach(j=>html+=`<option value="${j.id}">${j.nom}</option>`);
             html+=`</select><button type="submit">Voir Top 10</button></form>
                    <a href="/">⬅ Retour</a>`;
-            res.send(html);
+            res.send(renderPage(route.includes("meilleurs")?"Meilleurs jeux":"Pires jeux", html));
         });
     });
     app.get(route+"/liste",(req,res)=>{
         const joueur_id = req.query.joueur_id;
-        let sql = `SELECT j.nom AS nom_jeu, AVG(s.score) AS score_moyen
-                   FROM jeux j LEFT JOIN scores s ON j.id=s.jeu_id`;
-        const params=[];
-        if(joueur_id) { sql += " WHERE s.joueur_id=?"; params.push(joueur_id);}
-        sql += " GROUP BY j.id ORDER BY score_moyen "+order+" LIMIT 10";
-        db.all(sql,params,(err,rows)=>{
-            if(err) return res.send("Erreur DB : "+err.message);
-            let html = `<h2>${route.includes("meilleurs")?"🏆 Top 10":"💀 Bottom 10"} - ${joueur_id?"Joueur sélectionné":"Tous les joueurs"}</h2><ol>`;
-            rows.forEach(r=>html+=`<li>${r.nom_jeu} - Score moyen : ${r.score_moyen!=null?r.score_moyen.toFixed(1):0}</li>`);
-            html+=`</ol><a href="${route}">⬅ Retour</a>`;
-            res.send(html);
+        let sql = `SELECT j.nom, AVG(s.score) AS moyenne FROM jeux j 
+                   LEFT JOIN scores s ON j.id=s.jeu_id`;
+        let params = [];
+        if(joueur_id) { sql += " AND s.joueur_id=?"; params.push(joueur_id); }
+        sql += " GROUP BY j.id ORDER BY moyenne "+order+" LIMIT 10";
+        db.all(sql, params, (err, rows)=>{
+            if(err) return res.send(renderPage("Erreur DB", err.message));
+            let html = `<h2>Top 10</h2><table><tr><th>Jeu</th><th>Moyenne</th></tr>`;
+            rows.forEach(r=>html+=`<tr><td>${r.nom}</td><td>${r.moyenne||"–"}</td></tr>`);
+            html+=`</table><a href="${route}">⬅ Retour</a>`;
+            res.send(renderPage("Top 10", html));
         });
     });
 }
-topJeux("/meilleurs-jeux","DESC");
-topJeux("/pires-jeux","ASC");
+topJeux("/meilleurs-jeux", "DESC");
+topJeux("/pires-jeux", "ASC");
 
 // ============================
 // FILTRAGES
 // ============================
-app.get("/filtrages",(req,res)=>{
-    res.send(`
+app.get("/filtrages", (req,res)=>{
+    const html = `
     <h2>Filtrages des jeux</h2>
     <form method="GET" action="/filtrages/liste">
         <label>Nombre de joueurs : <input type="number" name="joueurs"></label><br>
@@ -358,10 +383,11 @@ app.get("/filtrages",(req,res)=>{
         <button type="submit">Filtrer</button>
     </form>
     <a href="/">⬅ Retour</a>
-    `);
+    `;
+    res.send(renderPage("Filtrages des jeux", html));
 });
 
-app.get("/filtrages/liste",(req,res)=>{
+app.get("/filtrages/liste", (req,res)=>{
     const joueurs = parseInt(req.query.joueurs)||0;
     const temps = parseInt(req.query.temps)||0;
     const score_min = parseFloat(req.query.score_min)||0;
@@ -370,28 +396,29 @@ app.get("/filtrages/liste",(req,res)=>{
                FROM jeux j LEFT JOIN scores s ON j.id=s.jeu_id`;
     const params=[];
     const conditions=[];
-    if(joueurs>0) conditions.push("j.min_joueurs<=? AND j.max_joueurs>=?"), params.push(joueurs,joueurs);
-    if(temps>0) conditions.push("j.temps_max<=?"), params.push(temps);
+    if(joueurs>0) { conditions.push("j.min_joueurs<=? AND j.max_joueurs>=?"); params.push(joueurs,joueurs); }
+    if(temps>0) { conditions.push("j.temps_max<=?"); params.push(temps); }
     if(conditions.length>0) sql+=" WHERE "+conditions.join(" AND ");
     sql+=" GROUP BY j.id";
-    if(score_min>0) sql+=" HAVING score_moyen>=?";
-    if(score_min>0) params.push(score_min);
+    if(score_min>0) { sql+=" HAVING score_moyen>=?"; params.push(score_min); }
     sql+=" ORDER BY j.nom COLLATE NOCASE";
 
     db.all(sql,params,(err,rows)=>{
-        if(err) return res.send("Erreur DB : "+err.message);
-        if(rows.length===0) return res.send("Aucun jeu trouvé avec ces critères.<br><a href='/filtrages'>⬅ Retour</a>");
+        if(err) return res.send(renderPage("Erreur DB", err.message));
+        if(rows.length===0) return res.send(renderPage("Filtrages", "Aucun jeu trouvé avec ces critères.<br><a href='/filtrages'>⬅ Retour</a>"));
+
         let html = "<h2>Jeux filtrés</h2><ul>";
-        rows.forEach(j=>html+=`<li>${j.nom} - Joueurs : ${j.min_joueurs}-${j.max_joueurs}, Temps : ${j.temps_min}-${j.temps_max} min, Score moyen : ${j.score_moyen||0}</li>`);
+        rows.forEach(j=>{
+            html+=`<li>${j.nom} - Joueurs : ${j.min_joueurs}-${j.max_joueurs}, Temps : ${j.temps_min}-${j.temps_max} min, Score moyen : ${j.score_moyen||0}</li>`;
+        });
         html+="</ul><a href='/filtrages'>⬅ Retour</a>";
-        res.send(html);
+        res.send(renderPage("Jeux filtrés", html));
     });
 });
 
+
 // ============================
-// SERVER
+// SERVEUR
 // ============================
-const PORT = process.env.PORT || 10000; // 10000 est le port par défaut de Render
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Serveur démarré sur le port ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Serveur démarré sur http://localhost:${PORT}`));
