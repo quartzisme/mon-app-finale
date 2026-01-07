@@ -103,22 +103,40 @@ app.get("/joueurs", (req, res) => {
     db.all("SELECT * FROM joueurs ORDER BY id", [], (err, rows) => {
         if (err) return res.send(renderPage("Erreur DB", err.message));
 
-        let html = `<h2>Gestion des joueurs</h2><ul>`;
-        rows.forEach((row) => {
-            const imgPath = path.join(__dirname, "public/images", `${row.nom}.jpg`);
-            const imgSrc = fs.existsSync(imgPath) ? `/images/${row.nom}.jpg` : `/images/default.jpg`;
-            html += `<li>${row.nom} <br><img src="${imgSrc}" width="150" alt="Image de ${row.nom}"></li>`;
-        });
-        html += `</ul>
-                 <ul>
-                    <li><a href="/joueurs/ajouter">Ajouter un joueur</a></li>
-                    <li><a href="/joueurs/modifier">Modifier un joueur</a></li>
-                    <li><a href="/joueurs/supprimer">Supprimer un joueur</a></li>
-                 </ul>
-                 <a href="/">⬅ Retour au menu</a>`;
+        // 1️⃣ Les liens Ajouter / Modifier / Supprimer
+        let html = `<h2>Gestion des joueurs</h2>
+                    <ul>
+                        <li><a href="/joueurs/ajouter">Ajouter un joueur</a></li>
+                        <li><a href="/joueurs/modifier">Modifier un joueur</a></li>
+                        <li><a href="/joueurs/supprimer">Supprimer un joueur</a></li>
+                    </ul>`;
+
+        // 2️⃣ Affichage des cartes de tous les joueurs
+        if (rows.length > 0) {
+            html += `<h3>Voici les joueurs inscrits :</h3>
+                     <div style="display:flex; flex-wrap:wrap; gap:20px;">`;
+
+            rows.forEach((row) => {
+                const imgPath = path.join(__dirname, "public/images", `${row.nom}.jpg`);
+                const imgSrc = fs.existsSync(imgPath) ? `/images/${row.nom}.jpg` : `/images/default.jpg`;
+                html += `<div style="text-align:center;">
+                            <img src="${imgSrc}" width="150" alt="Image de ${row.nom}" style="border:1px solid #333; border-radius:8px;">
+                            <div>${row.nom}</div>
+                         </div>`;
+            });
+
+            html += `</div>`;
+        } else {
+            html += `<p>Aucun joueur inscrit pour le moment.</p>`;
+        }
+
+        // 3️⃣ Bouton retour
+        html += `<br><a href="/">⬅ Retour au menu</a>`;
+
         res.send(renderPage("Gestion des joueurs", html));
     });
 });
+
 
 app.get("/joueurs/ajouter", (req, res) => {
     const html = `
