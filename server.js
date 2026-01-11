@@ -140,7 +140,7 @@ app.get("/", (req, res) => {
         height:90vh;
         text-align:center;
     ">
-        <img src="/images/dé.jpg" style="max-width:200px; margin-bottom:20px;">
+        <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
         <h1>Jeux de société</h1>
 
         <a href="/menu">
@@ -152,7 +152,7 @@ app.get("/", (req, res) => {
                 color:white;
                 border:none;
             ">
-                Entrer dans l’application
+                GO !
             </button>
         </a>
     </div>
