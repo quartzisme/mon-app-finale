@@ -6,6 +6,21 @@ const fs = require("fs");
 
 const app = express();
 
+const multer = require("multer");
+
+// Stockage des images dans public/images
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, "public/images");
+    },
+    filename: function (req, file, cb) {
+        // nommer l'image avec le nom du joueur et l'extension
+        const ext = file.originalname.split('.').pop();
+        cb(null, req.body.nom + '.' + ext);
+    }
+});
+const upload = multer({ storage: storage });
+
 // Middleware pour parser les données POST
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -57,6 +72,21 @@ db.serialize(() => {
         nom TEXT NOT NULL UNIQUE
     )`);
 
+db.run(`
+    PRAGMA table_info(joueurs);
+`, (err, rows) => {
+    if (err) return;
+
+    db.all("PRAGMA table_info(joueurs);", [], (err, cols) => {
+        if (!cols.some(c => c.name === "etoiles")) {
+            db.run("ALTER TABLE joueurs ADD COLUMN etoiles INTEGER DEFAULT 0");
+            console.log("Colonne etoiles ajoutée");
+        }
+    });
+});
+
+
+
     db.run(`CREATE TABLE IF NOT EXISTS jeux (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT NOT NULL,
@@ -76,6 +106,28 @@ db.serialize(() => {
         FOREIGN KEY (jeu_id) REFERENCES jeux(id),
         FOREIGN KEY (joueur_id) REFERENCES joueurs(id)
     )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS competitions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT NOT NULL,
+        objectif INTEGER NOT NULL,
+        terminee INTEGER DEFAULT 0
+    );`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS competition_joueurs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        competition_id INTEGER,
+        joueur_id INTEGER
+    );`);
+
+   db.run(`CREATE TABLE IF NOT EXISTS competition_resultats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        competition_id INTEGER,
+        jeu_id INTEGER,
+        joueur_id INTEGER,
+        date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );`);
+
 });
 
 // ============================
@@ -85,12 +137,13 @@ app.get("/", (req, res) => {
     const html = `
     <h1>🎲 Jeux de Société</h1>
     <ul>
-        <li><a href="/joueurs">Les joueurs</a></li>
-        <li><a href="/jeux/menu">Les jeux de société</a></li>
-        <li><a href="/scores/ajouter">Donner un score</a></li>
-        <li><a href="/meilleurs-jeux">Les meilleurs jeux</a></li>
-        <li><a href="/pires-jeux">Les pires jeux</a></li>
-        <li><a href="/filtrages">Filtrages</a></li>
+        <li><a href="/joueurs">👥 Les joueurs</a></li>
+        <li><a href="/jeux/menu">⚔️ Les jeux de société</a></li>
+        <li><a href="/scores/ajouter">📊 Donner un score</a></li>
+        <li><a href="/meilleurs-jeux">🥇 Les meilleurs jeux</a></li>
+        <li><a href="/pires-jeux">💀 Les pires jeux</a></li>
+        <li><a href="/filtrages">🔍 Filtrages</a></li>
+        <li><a href="/competitions">🏆 Compétitions</a></li>
     </ul>
     `;
     res.send(renderPage("Menu principal", html));
@@ -103,28 +156,60 @@ app.get("/joueurs", (req, res) => {
     db.all("SELECT * FROM joueurs ORDER BY id", [], (err, rows) => {
         if (err) return res.send(renderPage("Erreur DB", err.message));
 
-        let html = `<h2>Gestion des joueurs</h2><ul>`;
+        // 1️⃣ Les liens Ajouter / Modifier / Supprimer
+        let html = `<h2>👥 Gestion des joueurs</h2>
+                    <ul>
+                        <li><a href="/joueurs/ajouter">Ajouter un joueur</a></li>
+                        <li><a href="/joueurs/modifier">Modifier un joueur</a></li>
+                        <li><a href="/joueurs/supprimer">Supprimer un joueur</a></li>
+                    </ul>`;
+
+        // 2️⃣ Affichage des cartes de tous les joueurs
+        if (rows.length > 0) {
+            html += `<h3>Voici les joueurs inscrits :</h3>
+                     <div style="display:flex; flex-wrap:wrap; gap:20px;">`;
+
         rows.forEach((row) => {
             const imgPath = path.join(__dirname, "public/images", `${row.nom}.jpg`);
             const imgSrc = fs.existsSync(imgPath) ? `/images/${row.nom}.jpg` : `/images/default.jpg`;
-            html += `<li>${row.nom} <br><img src="${imgSrc}" width="150" alt="Image de ${row.nom}"></li>`;
-        });
-        html += `</ul>
-                 <ul>
-                    <li><a href="/joueurs/ajouter">Ajouter un joueur</a></li>
-                    <li><a href="/joueurs/modifier">Modifier un joueur</a></li>
-                    <li><a href="/joueurs/supprimer">Supprimer un joueur</a></li>
-                 </ul>
-                 <a href="/">⬅ Retour au menu</a>`;
+
+            const etoiles = row.etoiles || 0;
+            let etoilesHtml = "";
+            for (let i = 0; i < etoiles; i++) {
+                etoilesHtml += "⭐";
+            }
+
+    html += `<div style="text-align:center; width:170px;">
+                <img src="${imgSrc}" width="150"
+                     alt="Image de ${row.nom}"
+                     style="border:1px solid #333; border-radius:8px;">
+                <div style="font-weight:bold;">${row.nom}</div>
+                <div style="color:gold; font-size:18px; min-height:22px;">
+                    ${etoilesHtml}
+                </div>
+             </div>`;
+});
+
+
+            html += `</div>`;
+        } else {
+            html += `<p>Aucun joueur inscrit pour le moment.</p>`;
+        }
+
+        // 3️⃣ Bouton retour
+        html += `<br><a href="/">⬅ Retour au menu</a>`;
+
         res.send(renderPage("Gestion des joueurs", html));
     });
 });
 
+
 app.get("/joueurs/ajouter", (req, res) => {
     const html = `
         <h2>Ajouter un joueur</h2>
-        <form method="POST" action="/joueurs/ajouter">
-            <label>Nom du joueur : <input type="text" name="nom" required></label>
+        <form method="POST" action="/joueurs/ajouter" enctype="multipart/form-data">
+            <label>Nom du joueur : <input type="text" name="nom" required></label><br>
+            <label>Photo (optionnelle) : <input type="file" name="image" accept="image/*"></label><br><br>
             <button type="submit">Ajouter</button>
         </form>
         <a href='/joueurs'>⬅ Retour</a>
@@ -132,40 +217,55 @@ app.get("/joueurs/ajouter", (req, res) => {
     res.send(renderPage("Ajouter un joueur", html));
 });
 
-app.post("/joueurs/ajouter", (req, res) => {
+app.post("/joueurs/ajouter", upload.single("image"), (req, res) => {
     const nom = req.body.nom.trim();
     if (!nom) return res.send(renderPage("Erreur", "Nom vide ! <a href='/joueurs/ajouter'>Réessayer</a>"));
+
     db.run("INSERT INTO joueurs (nom) VALUES (?)", [nom], function(err) {
         if (err) return res.send(renderPage("Erreur DB", err.message));
-        res.redirect("/joueurs");
+        // L'image a déjà été enregistrée dans public/images grâce à multer
+        res.send(renderPage("Joueur ajouté", `<p>✅ Joueur ${nom} ajouté avec succès !</p><a href="/joueurs">⬅ Retour</a>`));
     });
 });
+
 
 app.get("/joueurs/modifier", (req, res) => {
     db.all("SELECT * FROM joueurs ORDER BY id", [], (err, rows) => {
         if (err) return res.send(renderPage("Erreur DB", err.message));
+
         let html = `<h2>Modifier un joueur</h2>
                     <form method='POST' action='/joueurs/modifier'>
-                        <label>Choisir le joueur :
-                            <select name='id'>`;
-        rows.forEach(r => html += `<option value='${r.id}'>${r.nom}</option>`);
+                    <label>Choisir le joueur :
+                    <select name='id'>
+                    <option value="">-- Choisir --</option>`;
+
+        rows.forEach(r => {
+            html += `<option value='${r.id}'>${r.nom}</option>`;
+        });
+
         html += `</select></label><br>
                  <label>Nouveau nom : <input type='text' name='nouveau_nom' required></label><br>
                  <button type='submit'>Modifier</button>
-                 </form><a href='/joueurs'>⬅ Retour</a>`;
+                 </form>
+                 <a href='/joueurs'>⬅ Retour</a>`;
+
         res.send(renderPage("Modifier un joueur", html));
     });
 });
 
-app.post("/joueurs/modifier", (req, res) => {
+app.post("/joueurs/modifier", upload.single("image"), (req, res) => {
     const id = req.body.id;
     const nouveau_nom = req.body.nouveau_nom.trim();
     if (!nouveau_nom) return res.send(renderPage("Erreur", "Nom vide ! <a href='/joueurs/modifier'>Réessayer</a>"));
+
     db.run("UPDATE joueurs SET nom=? WHERE id=?", [nouveau_nom, id], err => {
         if (err) return res.send(renderPage("Erreur DB", err.message));
-        res.redirect("/joueurs");
+
+        // Si une image a été uploadée, elle est déjà dans public/images
+        res.send(renderPage("Joueur modifié", `<p>✅ Joueur modifié avec succès !</p><a href="/joueurs">⬅ Retour</a>`));
     });
 });
+
 
 app.get("/joueurs/supprimer", (req, res) => {
     db.all("SELECT * FROM joueurs ORDER BY id", [], (err, rows) => {
@@ -193,7 +293,7 @@ app.post("/joueurs/supprimer", (req, res) => {
 // ============================
 app.get("/jeux/menu", (req, res) => {
     const html = `
-        <h2>🎲 Jeux de société</h2>
+        <h2>⚔️ Jeux de société</h2>
         <ul>
             <li><a href="/jeux/liste">La liste des jeux</a></li>
             <li><a href="/jeux/gerer">Saisir / Modifier un jeu</a></li>
@@ -263,25 +363,54 @@ app.get("/jeux/gerer", (req,res) => {
 
 app.post("/jeux/gerer", (req,res) => {
     const { jeu_id, nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, action } = req.body;
-    if(action==="enregistrer"){
+
+    if(action === "enregistrer"){
+
         if(jeu_id){
-            db.run("UPDATE jeux SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
-                   [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id], err=>{
-                       if(err) return res.send(renderPage("Erreur DB", err.message));
-                       res.redirect("/jeux/gerer");
-                   });
-        }else{
-            db.run("INSERT INTO jeux (nom, extensions,min_joueurs,max_joueurs,temps_min,temps_max,statut) VALUES (?,?,?,?,?,?,?,?)",
-                   [nom, extensions,min_joueurs,max_joueurs,temps_min,temps_max,statut], err=>{
-                       if(err) return res.send(renderPage("Erreur DB", err.message));
-                       res.redirect("/jeux/gerer");
-                   });
+            // ✏️ MODIFICATION
+            db.run(
+              "UPDATE jeux SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
+              [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
+              err => {
+                  if(err) return res.send(renderPage("Erreur DB", err.message));
+
+                  res.send(renderPage(
+                    "Jeu enregistré",
+                    `<p>✅ Le jeu <strong>${nom}</strong> a été modifié avec succès.</p>
+                     <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
+                  ));
+              }
+            );
+
+        } else {
+            // ➕ CRÉATION
+            db.run(
+              "INSERT INTO jeux (nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut) VALUES (?,?,?,?,?,?,?)",
+              [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut],
+              err => {
+                  if(err) return res.send(renderPage("Erreur DB", err.message));
+
+                  res.send(renderPage(
+                    "Jeu ajouté",
+                    `<p>✅ Le jeu <strong>${nom}</strong> a été ajouté avec succès.</p>
+                     <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
+                  ));
+              }
+            );
         }
-    } else if(action==="supprimer"){
+
+    } else if(action === "supprimer"){
+
         if(!jeu_id) return res.send(renderPage("Erreur", "Veuillez sélectionner un jeu."));
-        db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err=>{
+
+        db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err => {
             if(err) return res.send(renderPage("Erreur DB", err.message));
-            res.redirect("/jeux/gerer");
+
+            res.send(renderPage(
+              "Jeu supprimé",
+              `<p>🗑️ Jeu supprimé avec succès.</p>
+               <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
+            ));
         });
     }
 });
@@ -295,7 +424,7 @@ app.get("/scores/ajouter", (req,res)=>{
         db.all("SELECT id, nom FROM joueurs ORDER BY nom COLLATE NOCASE", [], (err2, joueurs)=>{
             if(err2) return res.send(renderPage("Erreur DB", err2.message));
 
-            let html = `<h2>Donner un score</h2>
+            let html = `<h2>📊 Donner un score</h2>
                         <form method="POST" action="/scores/ajouter">
                         <label>Jeu :</label><br>
                         <select name="jeu_id" required>
@@ -408,11 +537,11 @@ topJeux("/pires-jeux", "ASC");
 // ============================
 app.get("/filtrages", (req,res)=>{
     const html = `
-    <h2>Filtrages des jeux</h2>
+    <h2>🔍 Filtrages des jeux</h2>
     <form method="GET" action="/filtrages/liste">
-        <label>Nombre de joueurs : <input type="number" name="joueurs"></label><br>
-        <label>Temps maximum (minutes) : <input type="number" name="temps"></label><br>
-        <label>Score minimum : <input type="number" step="0.5" name="score_min"></label><br><br>
+        <label>👤 Nombre de joueurs : <input type="number" name="joueurs"></label><br>
+        <label>⏳ Temps maximum (minutes) : <input type="number" name="temps"></label><br>
+        <label>🔢 Score minimum : <input type="number" step="0.5" name="score_min"></label><br><br>
         <button type="submit">Filtrer</button>
     </form>
     <a href="/">⬅ Retour</a>
@@ -446,6 +575,316 @@ app.get("/filtrages/liste", (req,res)=>{
         });
         html+="</ul><a href='/filtrages'>⬅ Retour</a>";
         res.send(renderPage("Jeux filtrés", html));
+    });
+});
+
+
+// ============================
+// COMPETITIONS
+// ============================
+app.get("/competitions", (req,res)=>{
+    const html = `
+    <h2>🏆 Compétitions</h2>
+    <ul>
+      <li><a href="/competitions/creer">Créer une compétition</a></li>
+      <li><a href="/competitions/modifier">Modifier / suivre une compétition</a></li>
+      <li><a href="/competitions/supprimer">Supprimer une compétition</a></li>
+    </ul>
+    <a href="/">⬅ Retour</a>
+    `;
+    res.send(renderPage("Compétitions", html));
+});
+
+app.get("/competitions/creer", (req, res) => {
+    db.all("SELECT * FROM joueurs ORDER BY nom", [], (err, joueurs) => {
+        if(err) return res.send(renderPage("Erreur DB", err.message));
+
+        let html = `<h2>Créer une compétition</h2>
+        <form method="POST" action="/competitions/creer">
+        Nom de la compétition : <input name="nom" required><br>
+        Objectif (victoires) : <input type="number" name="objectif" value="5"><br><br>
+        <h3>Joueurs</h3>`;
+
+        joueurs.forEach(j => {
+            html += `<label><input type="checkbox" name="joueurs" value="${j.id}"> ${j.nom}</label><br>`;
+        });
+
+        html += `<br><button type="submit">Créer</button></form>
+        <a href="/competitions">⬅ Retour</a>`;
+
+        res.send(renderPage("Créer compétition", html));
+    });
+});
+
+app.post("/competitions/creer", (req, res) => {
+    const { nom, objectif } = req.body;
+    let joueurs = req.body.joueurs || [];
+    if(!Array.isArray(joueurs)) joueurs = [joueurs];
+
+    db.run("INSERT INTO competitions (nom, objectif) VALUES (?,?)", [nom, objectif], function(err){
+        if(err) return res.send(renderPage("Erreur DB", err.message));
+
+        const competition_id = this.lastID;
+
+        joueurs.forEach(j => {
+            db.run(
+              "INSERT INTO competition_joueurs (competition_id,joueur_id) VALUES (?,?)",
+              [competition_id, j],
+              err => { if(err) console.log("Erreur compétition_joueurs:", err.message); }
+            );
+        });
+
+        res.redirect("/competitions");
+    });
+});
+
+// ============================
+// MODIFIER / SUIVRE UNE COMPÉTITION
+// ============================
+
+// Affichage de la liste des compétitions et choix de suivre/modifier
+app.get("/competitions/modifier", (req, res) => {
+    db.all("SELECT * FROM competitions ORDER BY nom", [], (err, competitions) => {
+        if(err) return res.send(renderPage("Erreur DB", err.message));
+
+        if(competitions.length === 0){
+            return res.send(renderPage("Compétitions",
+                "<p>Aucune compétition active.</p><a href='/competitions'>⬅ Retour</a>"
+            ));
+        }
+
+        let html = `<h2>Compétitions actives</h2>`;
+
+        let pending = competitions.length;
+
+        competitions.forEach(c => {
+            db.all(`
+                SELECT j.nom, cj.victoires
+                FROM competition_joueurs cj
+                JOIN joueurs j ON j.id = cj.joueur_id
+                WHERE cj.competition_id = ?
+                ORDER BY j.nom
+            `,[c.id],(err,joueurs)=>{
+
+                html += `<div style="border:1px solid #ccc; padding:10px; margin-bottom:15px;">
+                            <h3>${c.nom}</h3>
+                            <p>Objectif : ${c.objectif} victoire(s)</p>`;
+
+                joueurs.forEach(j=>{
+                    html += `<strong>${j.nom}</strong>
+                             <div style="display:flex; gap:4px; margin-bottom:6px;">`;
+
+                    for(let i=1;i<=c.objectif;i++){
+                        if(i <= j.victoires){
+                            html += `<div style="width:18px; height:18px; background:green;"></div>`;
+                        } else {
+                            html += `<div style="width:18px; height:18px; border:1px solid #aaa;"></div>`;
+                        }
+                    }
+
+                    html += `</div>`;
+                });
+
+                html += `<a href="/competitions/suivre?competition_id=${c.id}">
+                            ➜ Suivre / Modifier
+                         </a>
+                         </div>`;
+
+                pending--;
+                if(pending === 0){
+                    html += `<a href="/competitions">⬅ Retour</a>`;
+                    res.send(renderPage("Compétitions", html));
+                }
+            });
+        });
+    });
+});
+
+
+// Affichage d'une compétition spécifique avec barres de progression pour les victoires
+app.get("/competitions/suivre", (req,res) => {
+    const competition_id = req.query.competition_id;
+    if(!competition_id) return res.redirect("/competitions/modifier");
+
+    // Récupérer compétition et joueurs
+    db.get("SELECT * FROM competitions WHERE id=?", [competition_id], (err, competition) => {
+        if(err) return res.send(renderPage("Erreur DB", err.message));
+        if(!competition) return res.send(renderPage("Erreur", "Compétition introuvable"));
+
+        db.all(`
+            SELECT j.id, j.nom, cj.victoires
+            FROM competition_joueurs cj
+            JOIN joueurs j ON j.id = cj.joueur_id
+            WHERE cj.competition_id=?
+            ORDER BY j.nom
+        `, [competition_id], (err, joueurs) => {
+            if(err) return res.send(renderPage("Erreur DB", err.message));
+
+            let html = `<h2>Suivi de la compétition : ${competition.nom}</h2>
+                        <p>Objectif : ${competition.objectif} victoire(s)</p>
+                        <form method="POST" action="/competitions/enregistrer_victoires">
+                        <input type="hidden" name="competition_id" value="${competition.id}">`;
+
+            joueurs.forEach(j => {
+                html += `<h4>${j.nom}</h4>
+                         <div style="display:flex; gap:3px; margin-bottom:10px;">`;
+
+                for(let i=1;i<=competition.objectif;i++){
+                    if(i <= j.victoires){
+                        html += `<div style="width:20px; height:20px; background-color:green;"></div>`;
+                    } else {
+                        html += `<div style="width:20px; height:20px; border:1px solid #ccc;"></div>`;
+                    }
+                }
+
+                html += `</div>
+                         <label>Victoires : 
+                            <input type="number" name="victoires_${j.id}" value="${j.victoires}" min="0" max="${competition.objectif}">
+                         </label><br><br>`;
+            });
+
+            html += `<button type="submit">Enregistrer les victoires</button>
+                     </form>
+                     <a href="/competitions/modifier">⬅ Retour</a>`;
+
+            res.send(renderPage(`Suivi ${competition.nom}`, html));
+        });
+    });
+});
+
+// Enregistrer les victoires pour une compétition
+app.post("/competitions/enregistrer_victoires", (req,res) => {
+    const competition_id = req.body.competition_id;
+
+    Object.keys(req.body).forEach(key => {
+        if(key.startsWith("victoires_")){
+            const joueur_id = key.split("_")[1];
+            const victoires = parseInt(req.body[key]) || 0;
+
+            db.run("UPDATE competition_joueurs SET victoires=? WHERE competition_id=? AND joueur_id=?",
+                   [victoires, competition_id, joueur_id]);
+        }
+    });
+
+    res.redirect(`/competitions/suivre?competition_id=${competition_id}`);
+});
+
+app.get("/competitions/supprimer", (req, res) => {
+    db.all("SELECT * FROM competitions ORDER BY nom", [], (err, comps) => {
+        if (err) return res.send(err.message);
+
+        let html = `<h2>Terminer une compétition</h2>
+        <form method="GET" action="/competitions/supprimer/voir">
+        <label>Choisir la compétition :</label>
+        <select name="id" required>
+        <option value="">-- Choisir --</option>`;
+
+        comps.forEach(c => {
+            html += `<option value="${c.id}">${c.nom}</option>`;
+        });
+
+        html += `</select>
+        <button type="submit">Voir</button>
+        </form>
+        <a href="/competitions">⬅ Retour</a>`;
+
+        res.send(renderPage("Terminer une compétition", html));
+    });
+});
+
+
+app.post("/competitions/supprimer", (req, res) => {
+    const id = req.body.id;
+    if (!id) return res.redirect("/competitions/supprimer");
+
+    // 1️⃣ Récupérer les joueurs de la compétition
+    db.all("SELECT joueur_id, victoires FROM competition_joueurs WHERE competition_id=?", [id], (err, joueurs) => {
+        if (err) return res.send(err.message);
+
+        // 2️⃣ Mettre à jour les étoiles des joueurs
+        joueurs.forEach(j => {
+            // Exemple : 1 étoile par victoire dans cette compétition
+            db.run("UPDATE joueurs SET etoiles = COALESCE(etoiles,0) + ? WHERE id=?", [j.victoires, j.joueur_id]);
+        });
+
+        // 3️⃣ Supprimer les liens compétition-joueurs
+        db.run("DELETE FROM competition_joueurs WHERE competition_id=?", [id], (err) => {
+            if (err) return res.send(err.message);
+
+            // 4️⃣ Supprimer la compétition
+            db.run("DELETE FROM competitions WHERE id=?", [id], (err) => {
+                if (err) return res.send(err.message);
+
+                res.send(renderPage(
+                    "Compétition terminée",
+                    `<p>✅ La compétition a été terminée et les étoiles mises à jour.</p>
+                     <a href="/competitions/supprimer">⬅ Retour</a>`
+                ));
+            });
+        });
+    });
+});
+
+
+app.get("/competitions/supprimer", (req, res) => {
+    db.all("SELECT * FROM competitions ORDER BY nom", [], (err, comps) => {
+        if (err) return res.send(err.message);
+
+        let html = `<h2>Terminer une compétition</h2>
+        <form method="GET" action="/competitions/supprimer/voir">
+        <label>Choisir la compétition :</label>
+        <select name="id" required>
+        <option value="">-- Choisir --</option>`;
+
+        comps.forEach(c => {
+            html += `<option value="${c.id}">${c.nom}</option>`;
+        });
+
+        html += `</select>
+        <button type="submit">Voir</button>
+        </form>
+        <a href="/competitions">⬅ Retour</a>`;
+
+        res.send(renderPage("Terminer une compétition", html));
+    });
+});
+
+app.get("/competitions/supprimer/voir", (req, res) => {
+    const id = req.query.id;
+
+    db.get("SELECT * FROM competitions WHERE id=?", [id], (err, comp) => {
+        if (err || !comp) return res.redirect("/competitions/supprimer");
+
+        db.all(`
+            SELECT j.nom, cj.victoires
+            FROM competition_joueurs cj
+            JOIN joueurs j ON j.id = cj.joueur_id
+            WHERE cj.competition_id=?
+            ORDER BY cj.victoires DESC
+        `, [id], (err, joueurs) => {
+
+            if (err) return res.send(err.message);
+
+            let html = `<h2>Terminer : ${comp.nom}</h2>
+            <p><strong>Objectif :</strong> ${comp.objectif} victoires</p>
+            <table border="1" cellpadding="6">
+            <tr><th>Joueur</th><th>Victoires</th></tr>`;
+
+            joueurs.forEach(j => {
+                html += `<tr><td>${j.nom}</td><td>${j.victoires}</td></tr>`;
+            });
+
+            html += `</table><br>
+
+            <form method="POST" action="/competitions/supprimer">
+                <input type="hidden" name="id" value="${id}">
+                <button style="background:red;color:white">🏁 Terminer et attribuer les étoiles</button>
+            </form>
+
+            <a href="/competitions/supprimer">⬅ Retour</a>`;
+
+            res.send(renderPage("Terminer compétition", html));
+        });
     });
 });
 

@@ -9,10 +9,10 @@
   "dependencies": {
     "body-parser": "^1.20.2",
     "express": "^5.2.1",
+    "multer": "^2.0.2",
     "pg": "^8.11.1",
     "sqlite3": "^5.1.7"
   },
-  "devDependencies": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/quartzisme/jeux-societe-2.git"
