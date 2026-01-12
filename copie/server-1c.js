@@ -130,41 +130,10 @@ db.run(`
 
 });
 
-app.get("/", (req, res) => {
-    const html = `
-    <div style="
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        height:90vh;
-        text-align:center;
-    ">
-        <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
-        <h1>Jeux de société</h1>
-
-        <a href="/menu">
-            <button style="
-                font-size:20px;
-                padding:12px 30px;
-                border-radius:10px;
-                background:#2c7be5;
-                color:white;
-                border:none;
-            ">
-                GO !
-            </button>
-        </a>
-    </div>
-    `;
-    res.send(renderPage("Bienvenue", html));
-});
-
-
 // ============================
 // MENU PRINCIPAL
 // ============================
-app.get("/menu", (req, res) => {
+app.get("/", (req, res) => {
     const html = `
     <h1>🎲 Jeux de Société</h1>
     <ul>
@@ -177,7 +146,7 @@ app.get("/menu", (req, res) => {
         <li><a href="/competitions">🏆 Compétitions</a></li>
     </ul>
     `;
-    res.send(renderPage("Menu", html));
+    res.send(renderPage("Menu principal", html));
 });
 
 // ============================
@@ -228,7 +197,7 @@ app.get("/joueurs", (req, res) => {
         }
 
         // 3️⃣ Bouton retour
-        html += `<br><a href="/menu">⬅ Retour au menu</a>`;
+        html += `<br><a href="/">⬅ Retour au menu</a>`;
 
         res.send(renderPage("Gestion des joueurs", html));
     });
@@ -329,7 +298,7 @@ app.get("/jeux/menu", (req, res) => {
             <li><a href="/jeux/liste">La liste des jeux</a></li>
             <li><a href="/jeux/gerer">Saisir / Modifier un jeu</a></li>
         </ul>
-        <a href="/menu">⬅ Retour au menu</a>
+        <a href="/">⬅ Retour au menu</a>
     `;
     res.send(renderPage("Jeux de société", html));
 });
@@ -473,7 +442,7 @@ app.get("/scores/ajouter", (req,res)=>{
                    <input type="number" step="0.5" name="score" required><br><br>
                    <button type="submit">Enregistrer le score</button>
                    </form>
-                   <a href="/menu">⬅ Retour</a>
+                   <a href="/">⬅ Retour</a>
                    <script>
                      const select = document.getElementById("joueurSelect");
                      const carteDiv = document.getElementById("carteJoueur");
@@ -496,7 +465,7 @@ app.post("/scores/ajouter", (req,res)=>{
 
     db.run("INSERT INTO scores (jeu_id,joueur_id,score) VALUES (?,?,?)", [jeu_id,joueur_id,score], err=>{
         if(err) return res.send(renderPage("Erreur DB", err.message));
-        res.send(renderPage("Score enregistré", `<p>✅ Score enregistré !</p><a href="/scores/ajouter">Ajouter un autre score</a><br><a href="/menu">⬅ Retour</a>`));
+        res.send(renderPage("Score enregistré", `<p>✅ Score enregistré !</p><a href="/scores/ajouter">Ajouter un autre score</a><br><a href="/">⬅ Retour</a>`));
     });
 });
 
@@ -518,7 +487,7 @@ function topJeux(route, order){
             html+=`</select>
                    <button type="submit">Voir Top 10</button>
                    </form>
-                   <a href="/menu">⬅ Retour</a>`;
+                   <a href="/">⬅ Retour</a>`;
             res.send(renderPage(route.includes("meilleurs")?"Meilleurs jeux":"Pires jeux", html));
         });
     });
@@ -575,7 +544,7 @@ app.get("/filtrages", (req,res)=>{
         <label>🔢 Score minimum : <input type="number" step="0.5" name="score_min"></label><br><br>
         <button type="submit">Filtrer</button>
     </form>
-    <a href="/menu">⬅ Retour</a>
+    <a href="/">⬅ Retour</a>
     `;
     res.send(renderPage("Filtrages des jeux", html));
 });
@@ -621,7 +590,7 @@ app.get("/competitions", (req,res)=>{
       <li><a href="/competitions/modifier">Modifier / suivre une compétition</a></li>
       <li><a href="/competitions/supprimer">Supprimer une compétition</a></li>
     </ul>
-    <a href="/menu">⬅ Retour</a>
+    <a href="/">⬅ Retour</a>
     `;
     res.send(renderPage("Compétitions", html));
 });
