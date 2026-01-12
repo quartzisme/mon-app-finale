@@ -324,15 +324,17 @@ app.post("/joueurs/supprimer", (req, res) => {
 // ============================
 app.get("/jeux/menu", (req, res) => {
     const html = `
-        <h2>⚔️ Jeux de société</h2>
+        <h2>🎲 Jeux de société</h2>
         <ul>
-            <li><a href="/jeux/liste">La liste des jeux</a></li>
-            <li><a href="/jeux/gerer">Saisir / Modifier un jeu</a></li>
+            <li><a href="/jeux/liste">📋 Liste des jeux</a></li>
+            <li><a href="/jeux/creer">➕ Créer un nouveau jeu</a></li>
+            <li><a href="/jeux/gerer">✏️ Modifier / Supprimer un jeu</a></li>
         </ul>
         <a href="/menu">⬅ Retour au menu</a>
     `;
     res.send(renderPage("Jeux de société", html));
 });
+
 
 app.get("/jeux/liste", (req, res) => {
     const sql = `
@@ -368,83 +370,117 @@ app.get("/jeux/liste", (req, res) => {
 });
 
 // ============================
-// Gestion de /jeux/gerer POST et GET
+// Gestion de /jeux/creer
 // ============================
-app.get("/jeux/gerer", (req,res) => {
-    db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
-        if(err) return res.send(renderPage("Erreur DB", err.message));
-        let html = `<h2>Saisir ou modifier un jeu</h2>
-                    <form method="POST" action="/jeux/gerer">
-                    <label>Jeu :</label><select name="jeu_id"><option value="">-- Nouveau jeu --</option>`;
-        jeux.forEach(j => html += `<option value="${j.id}">${j.nom}</option>`);
-        html += `</select><br><br>
-                 <label>Nom :</label><input type="text" name="nom" required><br>
-                 <label>Extensions :</label><input type="text" name="extensions"><br>
-                 <label>Min joueurs :</label><input type="number" name="min_joueurs"><br>
-                 <label>Max joueurs :</label><input type="number" name="max_joueurs"><br>
-                 <label>Temps min :</label><input type="number" name="temps_min"><br>
-                 <label>Temps max :</label><input type="number" name="temps_max"><br>
-                 <label>Statut :</label><input type="text" name="statut"><br><br>
-                 <button type="submit" name="action" value="enregistrer">Enregistrer</button>
-                 <button type="submit" name="action" value="supprimer">Supprimer</button>
-                 </form><a href="/jeux/menu">⬅ Retour</a>`;
-        res.send(renderPage("Saisir/Modifier un jeu", html));
-    });
+app.get("/jeux/creer", (req, res) => {
+    const html = `
+        <h2>➕ Créer un nouveau jeu</h2>
+        <form method="POST" action="/jeux/creer">
+            <label>Nom :</label><input type="text" name="nom" required><br>
+            <label>Extensions :</label><input type="text" name="extensions"><br>
+            <label>Min joueurs :</label><input type="number" name="min_joueurs"><br>
+            <label>Max joueurs :</label><input type="number" name="max_joueurs"><br>
+            <label>Temps min :</label><input type="number" name="temps_min"><br>
+            <label>Temps max :</label><input type="number" name="temps_max"><br>
+            <label>Statut :</label><input type="text" name="statut"><br><br>
+            <button type="submit">Créer le jeu</button>
+        </form>
+        <a href="/jeux/menu">⬅ Retour</a>
+    `;
+    res.send(renderPage("Créer un jeu", html));
 });
 
-app.post("/jeux/gerer", (req,res) => {
-    const { jeu_id, nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, action } = req.body;
+app.post("/jeux/creer", (req, res) => {
+    const { nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut } = req.body;
 
-    if(action === "enregistrer"){
-
-        if(jeu_id){
-            // ✏️ MODIFICATION
-            db.run(
-              "UPDATE jeux SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
-              [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
-              err => {
-                  if(err) return res.send(renderPage("Erreur DB", err.message));
-
-                  res.send(renderPage(
-                    "Jeu enregistré",
-                    `<p>✅ Le jeu <strong>${nom}</strong> a été modifié avec succès.</p>
-                     <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
-                  ));
-              }
-            );
-
-        } else {
-            // ➕ CRÉATION
-            db.run(
-              "INSERT INTO jeux (nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut) VALUES (?,?,?,?,?,?,?)",
-              [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut],
-              err => {
-                  if(err) return res.send(renderPage("Erreur DB", err.message));
-
-                  res.send(renderPage(
-                    "Jeu ajouté",
-                    `<p>✅ Le jeu <strong>${nom}</strong> a été ajouté avec succès.</p>
-                     <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
-                  ));
-              }
-            );
-        }
-
-    } else if(action === "supprimer"){
-
-        if(!jeu_id) return res.send(renderPage("Erreur", "Veuillez sélectionner un jeu."));
-
-        db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err => {
-            if(err) return res.send(renderPage("Erreur DB", err.message));
+    db.run(
+        "INSERT INTO jeux (nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut) VALUES (?,?,?,?,?,?,?)",
+        [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut],
+        err => {
+            if (err) return res.send(renderPage("Erreur DB", err.message));
 
             res.send(renderPage(
-              "Jeu supprimé",
-              `<p>🗑️ Jeu supprimé avec succès.</p>
-               <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
+                "Jeu créé",
+                `<p>✅ Le jeu <strong>${nom}</strong> a été créé.</p>
+                 <a href="/jeux/menu">⬅ Retour</a>`
             ));
+        }
+    );
+});
+
+
+// ============================
+// Gestion de /jeux/gerer POST et GET
+// ============================
+app.get("/jeux/gerer", (req, res) => {
+    db.all("SELECT * FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
+        if (err) return res.send(renderPage("Erreur DB", err.message));
+
+        let message = "";
+        if (req.query.ok) {
+            message = `<p style="color:green; font-weight:bold;">✅ La modification a été effectuée</p>`;
+        }
+//  JEU SÉLECTIONNÉ
+        const jeu = jeux.find(j => j.id == req.query.jeu_id);
+                
+        let html = `
+            <h2>✏️ Modifier / Supprimer un jeu</h2>
+            ${message}
+
+            <form method="GET" action="/jeux/gerer">
+            <label>Choisir un jeu :</label>
+            <select name="jeu_id" onchange="this.form.submit()">
+                <option value="">-- Sélectionner --</option>`;
+
+        jeux.forEach(j => {
+            html += `<option value="${j.id}" ${req.query.jeu_id == j.id ? "selected" : ""}>${j.nom}</option>`;
+        });
+
+        html += `</select></form><br>`;
+
+
+        if (jeu) {
+            html += `
+            <form method="POST" action="/jeux/gerer">
+                <input type="hidden" name="jeu_id" value="${jeu.id}">
+                <p><strong>${jeu.nom}</strong></p>
+                <label>Extensions :</label><input type="text" name="extensions" value="${jeu.extensions||""}"><br>
+                <label>Min joueurs :</label><input type="number" name="min_joueurs" value="${jeu.min_joueurs||""}"><br>
+                <label>Max joueurs :</label><input type="number" name="max_joueurs" value="${jeu.max_joueurs||""}"><br>
+                <label>Temps min :</label><input type="number" name="temps_min" value="${jeu.temps_min||""}"><br>
+                <label>Temps max :</label><input type="number" name="temps_max" value="${jeu.temps_max||""}"><br>
+                <label>Statut :</label><input type="text" name="statut" value="${jeu.statut||""}"><br><br>
+                <button name="action" value="modifier">💾 Enregistrer</button>
+                <button name="action" value="supprimer" onclick="return confirm('Supprimer ce jeu ?')">🗑️ Supprimer</button>
+            </form>`;
+        }
+
+        html += `<br><a href="/jeux/menu">⬅ Retour</a>`;
+        res.send(renderPage("Modifier un jeu", html));
+    });
+});
+app.post("/jeux/gerer", (req, res) => {
+    const { jeu_id, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, action } = req.body;
+
+    if (action === "modifier") {
+        db.run(
+            "UPDATE jeux SET extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
+            [extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
+            err => {
+                if (err) return res.send(renderPage("Erreur DB", err.message));
+                res.redirect("/jeux/gerer?jeu_id=" + jeu_id + "&ok=1");
+            }
+        );
+    }
+
+    if (action === "supprimer") {
+        db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err => {
+            if (err) return res.send(renderPage("Erreur DB", err.message));
+            res.redirect("/jeux/gerer");
         });
     }
 });
+
 
 // ============================
 // SCORES
