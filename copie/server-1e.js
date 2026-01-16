@@ -1,98 +1,127 @@
-// server.js
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 const fs = require("fs");
-
-require("dotenv").config();
+const session = require("express-session");
+const bcrypt = require("bcrypt"); // pour hash des mots de passe
 
 const app = express();
 
-const session = require("express-session");
+// ============================
+// MIDDLEWARES
+// ============================
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use("/images", express.static(path.join(__dirname, "public/images")));
 
+// Sessions pour login
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || "changeme", // à mettre dans .env sur Render
     resave: false,
     saveUninitialized: false
 }));
 
-const multer = require("multer");
-
-// Stockage des images dans public/images
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, "public/images");
-    },
-    filename: function (req, file, cb) {
-        // nommer l'image avec le nom du joueur et l'extension
-        const ext = file.originalname.split('.').pop();
-        cb(null, req.body.nom + '.' + ext);
-    }
-});
-const upload = multer({ storage: storage });
-
-// Middleware pour parser les données POST
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-
-// Servir les images statiques
-app.use("/images", express.static(path.join(__dirname, "public/images")));
-
-// Base de données SQLite
+// ============================
+// DATABASE
+// ============================
 const dbPath = path.join(__dirname, "database.db");
-const db = new sqlite3.Database(dbPath, (err) => {
+const db = new sqlite3.Database(dbPath, err => {
     if (err) console.error("Erreur ouverture DB :", err.message);
     else console.log("DB connectée :", dbPath);
 });
 
 // ============================
-// FONCTION GÉNÉRIQUE POUR RENDRE UNE PAGE
+// CREATE TABLES USERS SI NON EXISTE
 // ============================
-function renderPage(title, content) {
-    return `
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${title}</title>
-        <style>
-            body { font-size: 20px; line-height: 1.6; font-family: Arial, sans-serif; margin: 10px; }
-            h1, h2 { font-size: 1.8em; }
-            ul, li { font-size: 18px; }
-            a, button { font-size: 18px; padding: 8px; text-decoration: none; display: inline-block; margin: 4px 0; }
-            input, select { font-size: 18px; padding: 4px; margin: 4px 0; width: 100%; max-width: 300px; }
-            table { font-size: 18px; border-collapse: collapse; width: 100%; }
-            th, td { padding: 6px; border: 1px solid #333; text-align: left; }
-        </style>
-    </head>
-    <body>
-        ${content}
-    </body>
-    </html>
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT
+    )`);
+
+    // Ajouter Marc et Vincent si n'existent pas
+    const users = [
+        { username: "Marc", password: "tonmdpMarc" },
+        { username: "Vincent", password: "tonmdpVincent" }
+    ];
+
+    users.forEach(u => {
+        db.get("SELECT * FROM users WHERE username=?", [u.username], (err, row) => {
+            if (!row) {
+                const hash = bcrypt.hashSync(u.password, 10);
+                db.run("INSERT INTO users (username, password) VALUES (?,?)", [u.username, hash]);
+                console.log(`Utilisateur ${u.username} créé`);
+            }
+        });
+    });
+});
+
+// ============================
+// PAGE DE LOGIN
+// ============================
+app.get("/login", (req, res) => {
+    const html = `
+    <h2>Connexion</h2>
+    <form method="POST" action="/login">
+        <label>Nom d'utilisateur : <input type="text" name="username" required></label><br><br>
+        <label>Mot de passe : <input type="password" name="password" required></label><br><br>
+        <button type="submit">Se connecter</button>
+    </form>
     `;
+    res.send(html);
+});
+
+app.post("/login", (req, res) => {
+    const { username, password } = req.body;
+    db.get("SELECT * FROM users WHERE username=?", [username], (err, user) => {
+        if (err) return res.send("Erreur DB");
+        if (!user) return res.send("Identifiant ou mot de passe incorrect");
+
+        if (bcrypt.compareSync(password, user.password)) {
+            req.session.user = { id: user.id, username: user.username };
+            res.redirect("/menu");
+        } else {
+            res.send("Identifiant ou mot de passe incorrect");
+        }
+    });
+});
+
+// ============================
+// MIDDLEWARE PROTECTION ROUTES
+// ============================
+function auth(req, res, next) {
+    if (!req.session.user) return res.redirect("/login");
+    next();
 }
 
 // ============================
-// CRÉATION DES TABLES SI INEXISTANTES
+// ROUTE DE DÉCONNEXION
 // ============================
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS joueurs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nom TEXT NOT NULL UNIQUE
-    )`);
+app.get("/logout", (req, res) => {
+    req.session.destroy();
+    res.redirect("/login");
+});
 
-db.run(`
-    PRAGMA table_info(joueurs);
-`, (err, rows) => {
-    if (err) return;
+// ============================
+// ROUTES PRINCIPALES (PROTÉGÉES)
+// ============================
+app.get("/", auth, (req, res) => {
+    res.redirect("/menu");
+});
 
-    db.all("PRAGMA table_info(joueurs);", [], (err, cols) => {
-        if (!cols.some(c => c.name === "etoiles")) {
-            db.run("ALTER TABLE joueurs ADD COLUMN etoiles INTEGER DEFAULT 0");
-            console.log("Colonne etoiles ajoutée");
-        }
-    });
+app.get("/menu", auth, (req, res) => {
+    const html = `
+    <h1>Menu principal</h1>
+    <p>Bienvenue, ${req.session.user.username} !</p>
+    <ul>
+        <li><a href="/joueurs">Les joueurs</a></li>
+        <li><a href="/jeux/menu">Les jeux</a></li>
+        <li><a href="/scores/ajouter">Donner un score</a></li>
+    </ul>
+    <a href="/logout">Se déconnecter</a>
+    `;
+    res.send(html);
 });
 
 
@@ -141,55 +170,33 @@ db.run(`
 });
 
 app.get("/", (req, res) => {
- const html = `
-<div style="
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    height:90vh;
-    text-align:center;
-">
-    <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
-    <h1>Jeux de société</h1>
+    const html = `
+    <div style="
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        height:90vh;
+        text-align:center;
+    ">
+        <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
+        <h1>Jeux de société</h1>
 
-    <form method="POST" action="/login" style="margin-top:20px;">
-        <input name="username" placeholder="Usager" required
-            style="font-size:18px; padding:8px; margin-bottom:10px; border-radius:6px;"><br>
-
-        <input name="password" type="password" placeholder="Mot de passe" required
-            style="font-size:18px; padding:8px; margin-bottom:15px; border-radius:6px;"><br>
-
-        <button style="
-            font-size:20px;
-            padding:12px 30px;
-            border-radius:10px;
-            background:#2c7be5;
-            color:white;
-            border:none;
-        ">
-            Entrer
-        </button>
-    </form>
-</div>
-`;
-
-app.post("/login", (req, res) => {
-    const { username, password } = req.body;
-
-    if (
-        username === process.env.ADMIN_USER &&
-        password === process.env.ADMIN_PASS
-    ) {
-        req.session.auth = true;
-        return res.redirect("/menu");
-    }
-
-    res.send("Identifiant ou mot de passe incorrect, Réessayer");
-});
-
-
-res.send(renderPage("Bienvenue", html));
+        <a href="/menu">
+            <button style="
+                font-size:20px;
+                padding:12px 30px;
+                border-radius:10px;
+                background:#2c7be5;
+                color:white;
+                border:none;
+            ">
+                GO !
+            </button>
+        </a>
+    </div>
+    `;
+    res.send(renderPage("Bienvenue", html));
 });
 
 
@@ -197,10 +204,6 @@ res.send(renderPage("Bienvenue", html));
 // MENU PRINCIPAL
 // ============================
 app.get("/menu", (req, res) => {
-    if (!req.session.auth) {
-        return res.redirect("/");
-    }
-
     const html = `
     <h1>🎲 Jeux de Société</h1>
     <ul>
@@ -360,15 +363,17 @@ app.post("/joueurs/supprimer", (req, res) => {
 // ============================
 app.get("/jeux/menu", (req, res) => {
     const html = `
-        <h2>⚔️ Jeux de société</h2>
+        <h2>🎲 Jeux de société</h2>
         <ul>
-            <li><a href="/jeux/liste">La liste des jeux</a></li>
-            <li><a href="/jeux/gerer">Saisir / Modifier un jeu</a></li>
+            <li><a href="/jeux/liste">📋 Liste des jeux</a></li>
+            <li><a href="/jeux/creer">➕ Créer un nouveau jeu</a></li>
+            <li><a href="/jeux/gerer">✏️ Modifier / Supprimer un jeu</a></li>
         </ul>
         <a href="/menu">⬅ Retour au menu</a>
     `;
     res.send(renderPage("Jeux de société", html));
 });
+
 
 app.get("/jeux/liste", (req, res) => {
     const sql = `
@@ -404,83 +409,117 @@ app.get("/jeux/liste", (req, res) => {
 });
 
 // ============================
-// Gestion de /jeux/gerer POST et GET
+// Gestion de /jeux/creer
 // ============================
-app.get("/jeux/gerer", (req,res) => {
-    db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
-        if(err) return res.send(renderPage("Erreur DB", err.message));
-        let html = `<h2>Saisir ou modifier un jeu</h2>
-                    <form method="POST" action="/jeux/gerer">
-                    <label>Jeu :</label><select name="jeu_id"><option value="">-- Nouveau jeu --</option>`;
-        jeux.forEach(j => html += `<option value="${j.id}">${j.nom}</option>`);
-        html += `</select><br><br>
-                 <label>Nom :</label><input type="text" name="nom" required><br>
-                 <label>Extensions :</label><input type="text" name="extensions"><br>
-                 <label>Min joueurs :</label><input type="number" name="min_joueurs"><br>
-                 <label>Max joueurs :</label><input type="number" name="max_joueurs"><br>
-                 <label>Temps min :</label><input type="number" name="temps_min"><br>
-                 <label>Temps max :</label><input type="number" name="temps_max"><br>
-                 <label>Statut :</label><input type="text" name="statut"><br><br>
-                 <button type="submit" name="action" value="enregistrer">Enregistrer</button>
-                 <button type="submit" name="action" value="supprimer">Supprimer</button>
-                 </form><a href="/jeux/menu">⬅ Retour</a>`;
-        res.send(renderPage("Saisir/Modifier un jeu", html));
-    });
+app.get("/jeux/creer", (req, res) => {
+    const html = `
+        <h2>➕ Créer un nouveau jeu</h2>
+        <form method="POST" action="/jeux/creer">
+            <label>Nom :</label><input type="text" name="nom" required><br>
+            <label>Extensions :</label><input type="text" name="extensions"><br>
+            <label>Min joueurs :</label><input type="number" name="min_joueurs"><br>
+            <label>Max joueurs :</label><input type="number" name="max_joueurs"><br>
+            <label>Temps min :</label><input type="number" name="temps_min"><br>
+            <label>Temps max :</label><input type="number" name="temps_max"><br>
+            <label>Statut :</label><input type="text" name="statut"><br><br>
+            <button type="submit">Créer le jeu</button>
+        </form>
+        <a href="/jeux/menu">⬅ Retour</a>
+    `;
+    res.send(renderPage("Créer un jeu", html));
 });
 
-app.post("/jeux/gerer", (req,res) => {
-    const { jeu_id, nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, action } = req.body;
+app.post("/jeux/creer", (req, res) => {
+    const { nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut } = req.body;
 
-    if(action === "enregistrer"){
-
-        if(jeu_id){
-            // ✏️ MODIFICATION
-            db.run(
-              "UPDATE jeux SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
-              [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
-              err => {
-                  if(err) return res.send(renderPage("Erreur DB", err.message));
-
-                  res.send(renderPage(
-                    "Jeu enregistré",
-                    `<p>✅ Le jeu <strong>${nom}</strong> a été modifié avec succès.</p>
-                     <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
-                  ));
-              }
-            );
-
-        } else {
-            // ➕ CRÉATION
-            db.run(
-              "INSERT INTO jeux (nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut) VALUES (?,?,?,?,?,?,?)",
-              [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut],
-              err => {
-                  if(err) return res.send(renderPage("Erreur DB", err.message));
-
-                  res.send(renderPage(
-                    "Jeu ajouté",
-                    `<p>✅ Le jeu <strong>${nom}</strong> a été ajouté avec succès.</p>
-                     <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
-                  ));
-              }
-            );
-        }
-
-    } else if(action === "supprimer"){
-
-        if(!jeu_id) return res.send(renderPage("Erreur", "Veuillez sélectionner un jeu."));
-
-        db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err => {
-            if(err) return res.send(renderPage("Erreur DB", err.message));
+    db.run(
+        "INSERT INTO jeux (nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut) VALUES (?,?,?,?,?,?,?)",
+        [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut],
+        err => {
+            if (err) return res.send(renderPage("Erreur DB", err.message));
 
             res.send(renderPage(
-              "Jeu supprimé",
-              `<p>🗑️ Jeu supprimé avec succès.</p>
-               <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
+                "Jeu créé",
+                `<p>✅ Le jeu <strong>${nom}</strong> a été créé.</p>
+                 <a href="/jeux/menu">⬅ Retour</a>`
             ));
+        }
+    );
+});
+
+
+// ============================
+// Gestion de /jeux/gerer POST et GET
+// ============================
+app.get("/jeux/gerer", (req, res) => {
+    db.all("SELECT * FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
+        if (err) return res.send(renderPage("Erreur DB", err.message));
+
+        let message = "";
+        if (req.query.ok) {
+            message = `<p style="color:green; font-weight:bold;">✅ La modification a été effectuée</p>`;
+        }
+//  JEU SÉLECTIONNÉ
+        const jeu = jeux.find(j => j.id == req.query.jeu_id);
+                
+        let html = `
+            <h2>✏️ Modifier / Supprimer un jeu</h2>
+            ${message}
+
+            <form method="GET" action="/jeux/gerer">
+            <label>Choisir un jeu :</label>
+            <select name="jeu_id" onchange="this.form.submit()">
+                <option value="">-- Sélectionner --</option>`;
+
+        jeux.forEach(j => {
+            html += `<option value="${j.id}" ${req.query.jeu_id == j.id ? "selected" : ""}>${j.nom}</option>`;
+        });
+
+        html += `</select></form><br>`;
+
+
+        if (jeu) {
+            html += `
+            <form method="POST" action="/jeux/gerer">
+                <input type="hidden" name="jeu_id" value="${jeu.id}">
+                <p><strong>${jeu.nom}</strong></p>
+                <label>Extensions :</label><input type="text" name="extensions" value="${jeu.extensions||""}"><br>
+                <label>Min joueurs :</label><input type="number" name="min_joueurs" value="${jeu.min_joueurs||""}"><br>
+                <label>Max joueurs :</label><input type="number" name="max_joueurs" value="${jeu.max_joueurs||""}"><br>
+                <label>Temps min :</label><input type="number" name="temps_min" value="${jeu.temps_min||""}"><br>
+                <label>Temps max :</label><input type="number" name="temps_max" value="${jeu.temps_max||""}"><br>
+                <label>Statut :</label><input type="text" name="statut" value="${jeu.statut||""}"><br><br>
+                <button name="action" value="modifier">💾 Enregistrer</button>
+                <button name="action" value="supprimer" onclick="return confirm('Supprimer ce jeu ?')">🗑️ Supprimer</button>
+            </form>`;
+        }
+
+        html += `<br><a href="/jeux/menu">⬅ Retour</a>`;
+        res.send(renderPage("Modifier un jeu", html));
+    });
+});
+app.post("/jeux/gerer", (req, res) => {
+    const { jeu_id, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, action } = req.body;
+
+    if (action === "modifier") {
+        db.run(
+            "UPDATE jeux SET extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
+            [extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
+            err => {
+                if (err) return res.send(renderPage("Erreur DB", err.message));
+                res.redirect("/jeux/gerer?jeu_id=" + jeu_id + "&ok=1");
+            }
+        );
+    }
+
+    if (action === "supprimer") {
+        db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err => {
+            if (err) return res.send(renderPage("Erreur DB", err.message));
+            res.redirect("/jeux/gerer");
         });
     }
 });
+
 
 // ============================
 // SCORES
@@ -957,7 +996,9 @@ app.get("/competitions/supprimer/voir", (req, res) => {
 
 
 // ============================
-// SERVEUR
+// SERVER
 // ============================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Serveur démarré sur http://localhost:${PORT}`));
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Serveur lancé sur http://localhost:${port}`);
+});
