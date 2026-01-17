@@ -463,7 +463,7 @@ app.get("/jeux/liste", (req, res) => {
         let html = `
         <div style="max-width:1000px; width:95%; margin:auto; padding:10px;">
             <h2>Liste des jeux</h2>
-            <table>
+            <table style="width:100%; border-collapse:collapse;">
                 <tr>
                     <th>Nom</th><th>Extensions</th><th>Min joueurs</th><th>Max joueurs</th>
                     <th>Temps min</th><th>Temps max</th><th>Statut</th><th>Moyenne score</th>
