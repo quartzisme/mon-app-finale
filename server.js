@@ -171,6 +171,20 @@ app.get("/", (req, res) => {
             ">
                 Entrer
             </button>
+            <button type="button" onclick="alert('Indice : j$')" 
+                style="
+                font-size:14px;
+                padding:6px 15px;
+                border-radius:6px;
+                background:#888;
+                color:white;
+                border:none;
+                margin-top:10px;
+                cursor:pointer;
+            ">
+                Indice
+            </button>
+
         </form>
     </div>
     `;
@@ -241,7 +255,7 @@ app.get("/menu", (req, res) => {
         <li><a href="/pires-jeux">💀 Les pires jeux</a></li>
         <li><a href="/filtrages">🔍 Filtrages</a></li>
         <li><a href="/competitions">🏆 Compétitions</a></li>
-        <li><a href="/logout">    Déconnexion</a></li>
+        <li><a href="/logout">⌽ Déconnexion</a></li>
     </ul>
     `;
     res.send(renderPage("Menu", html));
