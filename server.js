@@ -502,21 +502,44 @@ app.get("/jeux/liste", (req, res) => {
 app.get("/jeux/gerer", (req,res) => {
     db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
         if(err) return res.send(renderPage("Erreur DB", err.message));
+
+        // Formulaire
         let html = `<h2>Saisir ou modifier un jeu</h2>
                     <form method="POST" action="/jeux/gerer">
-                    <label>Jeu :</label><select name="jeu_id"><option value="">-- Nouveau jeu --</option>`;
-        jeux.forEach(j => html += `<option value="${j.id}">${j.nom}</option>`);
+
+                    <label>Jeu existant :</label>
+                    <select name="jeu_id" id="jeu_select" onchange="remplirChamps()">
+                        <option value="">➕ Nouveau jeu</option>`;
+        jeux.forEach(j => html += `<option value="${j.id}" data-nom="${j.nom}" data-extensions="${j.extensions||''}" data-min="${j.min_joueurs||''}" data-max="${j.max_joueurs||''}" data-tmin="${j.temps_min||''}" data-tmax="${j.temps_max||''}" data-statut="${j.statut||''}">${j.nom}</option>`);
         html += `</select><br><br>
-                 <label>Nom :</label><input type="text" name="nom" required><br>
-                 <label>Extensions :</label><input type="text" name="extensions"><br>
-                 <label>Min joueurs :</label><input type="number" name="min_joueurs"><br>
-                 <label>Max joueurs :</label><input type="number" name="max_joueurs"><br>
-                 <label>Temps min :</label><input type="number" name="temps_min"><br>
-                 <label>Temps max :</label><input type="number" name="temps_max"><br>
-                 <label>Statut :</label><input type="text" name="statut"><br><br>
+
+                 <label>Nom :</label><input type="text" name="nom" id="nom" required><br>
+                 <label>Extensions :</label><input type="text" name="extensions" id="extensions"><br>
+                 <label>Min joueurs :</label><input type="number" name="min_joueurs" id="min_joueurs"><br>
+                 <label>Max joueurs :</label><input type="number" name="max_joueurs" id="max_joueurs"><br>
+                 <label>Temps min :</label><input type="number" name="temps_min" id="temps_min"><br>
+                 <label>Temps max :</label><input type="number" name="temps_max" id="temps_max"><br>
+                 <label>Statut :</label><input type="text" name="statut" id="statut"><br><br>
+
                  <button type="submit" name="action" value="enregistrer">Enregistrer</button>
                  <button type="submit" name="action" value="supprimer">Supprimer</button>
-                 </form><a href="/jeux/menu">⬅ Retour</a>`;
+                 </form><a href="/jeux/menu">⬅ Retour</a>
+
+                 <script>
+                    function remplirChamps() {
+                        const select = document.getElementById('jeu_select');
+                        const option = select.options[select.selectedIndex];
+
+                        document.getElementById('nom').value = option.dataset.nom || '';
+                        document.getElementById('extensions').value = option.dataset.extensions || '';
+                        document.getElementById('min_joueurs').value = option.dataset.min || '';
+                        document.getElementById('max_joueurs').value = option.dataset.max || '';
+                        document.getElementById('temps_min').value = option.dataset.tmin || '';
+                        document.getElementById('temps_max').value = option.dataset.tmax || '';
+                        document.getElementById('statut').value = option.dataset.statut || '';
+                    }
+                 </script>`;
+
         res.send(renderPage("Saisir/Modifier un jeu", html));
     });
 });
@@ -529,13 +552,13 @@ app.post("/jeux/gerer", (req,res) => {
         if(jeu_id){
             // ✏️ MODIFICATION
             db.run(
-              "UPDATE jeux SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
-              [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
+              "UPDATE jeux SET extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
+              [extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
               err => {
                   if(err) return res.send(renderPage("Erreur DB", err.message));
 
                   res.send(renderPage(
-                    "Jeu enregistré",
+                    "Jeu modifié",
                     `<p>✅ Le jeu <strong>${nom}</strong> a été modifié avec succès.</p>
                      <a href="/jeux/gerer">⬅ Retour à la gestion des jeux</a>`
                   ));
@@ -574,6 +597,7 @@ app.post("/jeux/gerer", (req,res) => {
         });
     }
 });
+
 
 // ============================
 // SCORES
