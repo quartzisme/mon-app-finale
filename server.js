@@ -461,7 +461,7 @@ app.get("/jeux/liste", (req, res) => {
         if (err) return res.send(renderPage("Erreur DB", err.message));
 
         let html = `
-        <div style="max-width:1000px; width:95%; margin:auto; padding:10px;">
+        <div style="max-width:100%; width:95%; margin:auto; padding:10px;">
             <h2>Liste des jeux</h2>
             <table style="width:100%; border-collapse:collapse;">
                 <tr>
