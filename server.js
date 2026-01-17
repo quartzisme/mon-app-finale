@@ -456,29 +456,45 @@ app.get("/jeux/liste", (req, res) => {
     GROUP BY j.id
     ORDER BY j.nom COLLATE NOCASE
     `;
+
     db.all(sql, [], (err, rows) => {
-        if(err) return res.send(renderPage("Erreur DB", err.message));
-        let html = `<h2>Liste des jeux</h2>
-                    <table><tr>
-                        <th>Nom</th><th>Extensions</th><th>Min joueurs</th><th>Max joueurs</th>
-                        <th>Temps min</th><th>Temps max</th><th>Statut</th><th>Moyenne score</th>
-                    </tr>`;
+        if (err) return res.send(renderPage("Erreur DB", err.message));
+
+        let html = `
+        <div style="max-width:1000px; width:95%; margin:auto; padding:10px;">
+            <h2>Liste des jeux</h2>
+            <table>
+                <tr>
+                    <th>Nom</th><th>Extensions</th><th>Min joueurs</th><th>Max joueurs</th>
+                    <th>Temps min</th><th>Temps max</th><th>Statut</th><th>Moyenne score</th>
+                </tr>
+        `;
+
         rows.forEach(j => {
-            html += `<tr>
-                        <td>${j.nom}</td>
-                        <td>${j.extensions||""}</td>
-                        <td>${j.min_joueurs}</td>
-                        <td>${j.max_joueurs}</td>
-                        <td>${j.temps_min}</td>
-                        <td>${j.temps_max}</td>
-                        <td>${j.statut||""}</td>
-                        <td>${j.moyenne_score||"–"}</td>
-                     </tr>`;
+            html += `
+                <tr>
+                    <td>${j.nom}</td>
+                    <td>${j.extensions || ""}</td>
+                    <td>${j.min_joueurs}</td>
+                    <td>${j.max_joueurs}</td>
+                    <td>${j.temps_min}</td>
+                    <td>${j.temps_max}</td>
+                    <td>${j.statut || ""}</td>
+                    <td>${j.moyenne_score || "–"}</td>
+                </tr>
+            `;
         });
-        html += `</table><a href="/jeux/menu">⬅ Retour</a>`;
+
+        html += `
+            </table>
+            <a href="/jeux/menu">⬅ Retour</a>
+        </div>
+        `;
+
         res.send(renderPage("Liste des jeux", html));
     });
 });
+
 
 // ============================
 // Gestion de /jeux/gerer POST et GET
