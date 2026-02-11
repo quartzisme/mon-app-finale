@@ -1,26 +1,14 @@
 // server.js
-import express from "express";
-import sqlite3 from "sqlite3";
-const { verbose } = sqlite3;
+const express = require("express");
+const sqlite3 = require("sqlite3").verbose();
+const path = require("path");
+const fs = require("fs");
 
-import fs from "fs";
-import dotenv from "dotenv";
-import session from "express-session";
-import multer from "multer";
-
-import { fileURLToPath } from "url";
-import path, { dirname, join } from "path";
-
-import { supabase } from './supabaseClient.js';
-
-
-
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+require("dotenv").config();
 
 const app = express();
+
+const session = require("express-session");
 
 app.use(session({
     secret: process.env.SESSION_SECRET,
@@ -28,7 +16,7 @@ app.use(session({
     saveUninitialized: false
 }));
 
-
+const multer = require("multer");
 
 // Stockage des images dans public/images
 const storage = multer.diskStorage({
@@ -48,11 +36,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // Servir les images statiques
-app.use("/images", express.static(join(__dirname, "public/images")));
-
+app.use("/images", express.static(path.join(__dirname, "public/images")));
 
 // Base de données SQLite
-const dbPath = join(__dirname, "database.db");
+const dbPath = path.join(__dirname, "database.db");
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) console.error("Erreur ouverture DB :", err.message);
     else console.log("DB connectée :", dbPath);
@@ -108,7 +95,9 @@ db.run(`
     });
 });
 
-    db.run(`CREATE TABLE IF NOT EXISTS "JeuxDeSociete-FeuilleJeux" (
+
+
+    db.run(`CREATE TABLE IF NOT EXISTS jeux (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT NOT NULL,
         extensions TEXT,
@@ -150,8 +139,6 @@ db.run(`
     );`);
 
 });
-
-
 
 app.get("/", (req, res) => {
  const html = `
@@ -224,7 +211,6 @@ app.get("/menu", (req, res) => {
         <li><a href="/pires-jeux">💀 Les pires jeux</a></li>
         <li><a href="/filtrages">🔍 Filtrages</a></li>
         <li><a href="/competitions">🏆 Compétitions</a></li>
-        <li><a href="/logout">Déconnexion</a></li>
     </ul>
     `;
     res.send(renderPage("Menu", html));
@@ -388,23 +374,20 @@ app.get("/jeux/liste", (req, res) => {
     const sql = `
     SELECT j.id, j.nom, j.extensions, j.min_joueurs, j.max_joueurs, j.temps_min, j.temps_max, j.statut,
            ROUND(AVG(s.score),2) AS moyenne_score
-    FROM "JeuxDeSociete-FeuilleJeux" j
+    FROM jeux j
     LEFT JOIN scores s ON j.id=s.jeu_id
     GROUP BY j.id
     ORDER BY j.nom COLLATE NOCASE
     `;
     db.all(sql, [], (err, rows) => {
         if(err) return res.send(renderPage("Erreur DB", err.message));
-
         let html = `<h2>Liste des jeux</h2>
                     <table><tr>
                         <th>Nom</th><th>Extensions</th><th>Min joueurs</th><th>Max joueurs</th>
                         <th>Temps min</th><th>Temps max</th><th>Statut</th><th>Moyenne score</th>
                     </tr>`;
-
         rows.forEach(j => {
             html += `<tr>
-                        <td>${j.id}</td>            
                         <td>${j.nom}</td>
                         <td>${j.extensions||""}</td>
                         <td>${j.min_joueurs}</td>
@@ -415,26 +398,17 @@ app.get("/jeux/liste", (req, res) => {
                         <td>${j.moyenne_score||"–"}</td>
                      </tr>`;
         });
-
         html += `</table><a href="/jeux/menu">⬅ Retour</a>`;
         res.send(renderPage("Liste des jeux", html));
     });
 });
 
-
-
 // ============================
 // Gestion de /jeux/gerer POST et GET
 // ============================
 app.get("/jeux/gerer", (req,res) => {
-app.get("/jeux/gerer", async (req, res) => {
-    try {
-        const { data: jeux, error } = await supabase
-            .from('jeux')
-            .select('id, nom')
-            .order('nom', { ascending: true });
-        if(error) throw error;
-
+    db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux) => {
+        if(err) return res.send(renderPage("Erreur DB", err.message));
         let html = `<h2>Saisir ou modifier un jeu</h2>
                     <form method="POST" action="/jeux/gerer">
                     <label>Jeu :</label><select name="jeu_id"><option value="">-- Nouveau jeu --</option>`;
@@ -451,11 +425,7 @@ app.get("/jeux/gerer", async (req, res) => {
                  <button type="submit" name="action" value="supprimer">Supprimer</button>
                  </form><a href="/jeux/menu">⬅ Retour</a>`;
         res.send(renderPage("Saisir/Modifier un jeu", html));
-
-    } catch(err) {
-        res.send(renderPage("Erreur Supabase", err.message));
-    }
-});
+    });
 });
 
 app.post("/jeux/gerer", (req,res) => {
@@ -466,7 +436,7 @@ app.post("/jeux/gerer", (req,res) => {
         if(jeu_id){
             // ✏️ MODIFICATION
             db.run(
-              'UPDATE "JeuxDeSociete-FeuilleJeux" SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?',
+              "UPDATE jeux SET nom=?, extensions=?, min_joueurs=?, max_joueurs=?, temps_min=?, temps_max=?, statut=? WHERE id=?",
               [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut, jeu_id],
               err => {
                   if(err) return res.send(renderPage("Erreur DB", err.message));
@@ -482,7 +452,7 @@ app.post("/jeux/gerer", (req,res) => {
         } else {
             // ➕ CRÉATION
             db.run(
-              'INSERT INTO "JeuxDeSociete-FeuilleJeux" (nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut) VALUES (?,?,?,?,?,?,?)',
+              "INSERT INTO jeux (nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut) VALUES (?,?,?,?,?,?,?)",
               [nom, extensions, min_joueurs, max_joueurs, temps_min, temps_max, statut],
               err => {
                   if(err) return res.send(renderPage("Erreur DB", err.message));
@@ -500,7 +470,7 @@ app.post("/jeux/gerer", (req,res) => {
 
         if(!jeu_id) return res.send(renderPage("Erreur", "Veuillez sélectionner un jeu."));
 
-        db.run('DELETE FROM "JeuxDeSociete-FeuilleJeux" WHERE id=?', [jeu_id], err => {
+        db.run("DELETE FROM jeux WHERE id=?", [jeu_id], err => {
             if(err) return res.send(renderPage("Erreur DB", err.message));
 
             res.send(renderPage(
@@ -516,7 +486,7 @@ app.post("/jeux/gerer", (req,res) => {
 // SCORES
 // ============================
 app.get("/scores/ajouter", (req,res)=>{
-    db.all('SELECT id, nom FROM "JeuxDeSociete-FeuilleJeux" ORDER BY nom COLLATE NOCASE', [], (err, jeux)=>{
+    db.all("SELECT id, nom FROM jeux ORDER BY nom COLLATE NOCASE", [], (err, jeux)=>{
         if(err) return res.send(renderPage("Erreur DB", err.message));
         db.all("SELECT id, nom FROM joueurs ORDER BY nom COLLATE NOCASE", [], (err2, joueurs)=>{
             if(err2) return res.send(renderPage("Erreur DB", err2.message));
@@ -592,7 +562,7 @@ function topJeux(route, order){
     // Page du Top 10
     app.get(route+"/liste",(req,res)=>{
         const joueur_id = req.query.joueur_id;
-        let sql = `SELECT j.nom, AVG(s.score) AS moyenne FROM "JeuxDeSociete-FeuilleJeux" j 
+        let sql = `SELECT j.nom, AVG(s.score) AS moyenne FROM jeux j 
                    LEFT JOIN scores s ON j.id=s.jeu_id WHERE 1=1`;
         let params = [];
         if(joueur_id) { sql += " AND s.joueur_id=?"; params.push(joueur_id); }
@@ -652,7 +622,7 @@ app.get("/filtrages/liste", (req,res)=>{
     const score_min = parseFloat(req.query.score_min)||0;
 
     let sql = `SELECT j.nom, j.min_joueurs,j.max_joueurs,j.temps_min,j.temps_max,ROUND(AVG(s.score),2) AS score_moyen
-               FROM "JeuxDeSociete-FeuilleJeux" j LEFT JOIN scores s ON j.id=s.jeu_id`;
+               FROM jeux j LEFT JOIN scores s ON j.id=s.jeu_id`;
     const params=[];
     const conditions=[];
     if(joueurs>0) { conditions.push("j.min_joueurs<=? AND j.max_joueurs>=?"); params.push(joueurs,joueurs); }
@@ -983,25 +953,6 @@ app.get("/competitions/supprimer/voir", (req, res) => {
             res.send(renderPage("Terminer compétition", html));
         });
     });
-});
-
-
-// ================= API JEUX SUPABASE =================
-
-app.get("/api/jeux", async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from("jeux")
-            .select("*")
-            .order("nom");
-
-        if (error) throw error;
-
-        res.json(data);
-    } catch (err) {
-        console.error("Erreur récupération jeux:", err);
-        res.status(500).json({ error: err.message });
-    }
 });
 
 

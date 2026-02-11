@@ -1,14 +1,22 @@
 // server.js
-const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
-const fs = require("fs");
+import express from "express";
+import sqlite3 from "sqlite3";
+const { verbose } = sqlite3;
 
-require("dotenv").config();
+import fs from "fs";
+import dotenv from "dotenv";
+import session from "express-session";
+import multer from "multer";
+
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
-
-const session = require("express-session");
 
 app.use(session({
     secret: process.env.SESSION_SECRET,
@@ -16,7 +24,7 @@ app.use(session({
     saveUninitialized: false
 }));
 
-const multer = require("multer");
+
 
 // Stockage des images dans public/images
 const storage = multer.diskStorage({
@@ -36,10 +44,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // Servir les images statiques
-app.use("/images", express.static(path.join(__dirname, "public/images")));
+app.use("/images", express.static(join(__dirname, "public/images")));
+
 
 // Base de données SQLite
-const dbPath = path.join(__dirname, "database.db");
+const dbPath = join(__dirname, "database.db");
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) console.error("Erreur ouverture DB :", err.message);
     else console.log("DB connectée :", dbPath);
@@ -95,8 +104,6 @@ db.run(`
     });
 });
 
-
-
     db.run(`CREATE TABLE IF NOT EXISTS jeux (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT NOT NULL,
@@ -139,6 +146,25 @@ db.run(`
     );`);
 
 });
+
+
+// ============================
+// TEST avec SUPABASE
+// ============================
+import { supabase } from './supabaseClient.js';
+
+async function testSupabase() {
+  const { data, error } = await supabase.from('jeux').select('*').limit(5);
+  if (error) {
+    console.log('Erreur Supabase:', error);
+  } else {
+    console.log('Test Supabase OK, 5 premiers jeux:', data);
+  }
+}
+
+testSupabase();
+
+
 
 app.get("/", (req, res) => {
  const html = `
@@ -211,6 +237,7 @@ app.get("/menu", (req, res) => {
         <li><a href="/pires-jeux">💀 Les pires jeux</a></li>
         <li><a href="/filtrages">🔍 Filtrages</a></li>
         <li><a href="/competitions">🏆 Compétitions</a></li>
+        <li><a href="/logout">Déconnexion</a></li>
     </ul>
     `;
     res.send(renderPage("Menu", html));
