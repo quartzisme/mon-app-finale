@@ -1,5 +1,5 @@
 function chargerJeux() {
-  fetch('/api/jeux')
+  fetch('https://mon-app-finale.onrender.com/api/jeux')
     .then(res => res.json())
     .then(data => {
       const liste = document.getElementById('listeJeux');
