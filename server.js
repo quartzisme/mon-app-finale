@@ -104,18 +104,57 @@ app.get("/api/jeux", async (req,res)=>{
     }
 });
 
-app.get("/jeux/liste", async (req,res)=>{
+app.get("/jeux/liste", async (req, res) => {
     try {
-        const { data: jeux, error } = await supabase.from("jeux").select("*").order("nom");
-        if(error) throw error;
-        let html = "<h2>Liste des jeux</h2><ul>";
-        jeux.forEach(j => html += `<li>${j.nom} (${j.min_joueurs}-${j.max_joueurs} joueurs, ${j.temps_min}-${j.temps_max} min, ${j.statut||""})</li>`);
-        html += "</ul><a href='/menu'>⬅ Retour</a>";
-        res.send(renderPage("Jeux", html));
-    } catch(err){
+
+        const { data: jeux, error } = await supabase
+            .from("jeux")
+            .select("*")
+            .order("nom");
+
+        if (error) throw error;
+
+        let rows = jeux.map(j => `
+            <tr>
+                <td>${j.nom || ""}</td>
+                <td>${j.extensions || ""}</td>
+                <td>${j.min_joueurs || ""}</td>
+                <td>${j.max_joueurs || ""}</td>
+                <td>${j.temps_min || ""}</td>
+                <td>${j.temps_max || ""}</td>
+                <td>${j.statut || ""}</td>
+                <td>-</td>
+            </tr>
+        `).join("");
+
+        const html = `
+            <h2>Liste des jeux</h2>
+
+            <table>
+                <tr>
+                    <th>Nom</th>
+                    <th>Extensions</th>
+                    <th>Min joueurs</th>
+                    <th>Max joueurs</th>
+                    <th>Temps min</th>
+                    <th>Temps max</th>
+                    <th>Statut</th>
+                    <th>Moyenne score</th>
+                </tr>
+
+                ${rows}
+            </table>
+
+            <a href="/jeux/menu">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Liste des jeux", html));
+
+    } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
 });
+
 
 // ===================== ROUTES JOUEURS =====================
 app.get("/joueurs/liste", async (req,res)=>{
