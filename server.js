@@ -159,16 +159,150 @@ app.get("/jeux/liste", async (req, res) => {
 // ===================== ROUTES JOUEURS =====================
 app.get("/joueurs/liste", async (req,res)=>{
     try {
-        const { data: joueurs, error } = await supabase.from("joueurs").select("*").order("nom");
+        const { data: joueurs, error } = await supabase
+            .from("joueurs")
+            .select("*")
+            .order("nom");
+
         if(error) throw error;
-        let html = "<h2>Liste des joueurs</h2><ul>";
-        joueurs.forEach(j => html += `<li>${j.nom} - Étoiles: ${j.etoiles||0}</li>`);
-        html += "</ul><a href='/menu'>⬅ Retour</a>";
+
+        let rows = joueurs.map(j => `
+            <tr>
+                <td>
+                    ${j.image ? `<img src="/images/${j.image}" width="80"><br>` : ""}
+                    ${j.nom}
+                </td>
+                <td>${j.etoiles || 0}</td>
+                <td>
+                    <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
+                    <a href="/joueurs/supprimer/${j.id}">🗑 Supprimer</a>
+                </td>
+            </tr>
+        `).join("");
+
+        const html = `
+            <h2>Gestion des joueurs</h2>
+            <a href="/joueurs/ajouter">➕ Ajouter joueur</a>
+            <table>
+                <tr>
+                    <th>Nom</th>
+                    <th>Étoiles</th>
+                    <th>Actions</th>
+                </tr>
+                ${rows}
+            </table>
+            <a href="/menu">⬅ Retour</a>
+        `;
+
         res.send(renderPage("Joueurs", html));
+
     } catch(err){
         res.send(renderPage("Erreur", err.message));
     }
 });
+
+app.get("/joueurs/ajouter", (req,res)=>{
+    const html = `
+        <h2>Ajouter joueur</h2>
+        <form method="POST" action="/joueurs/ajouter" enctype="multipart/form-data">
+            Nom:<br>
+            <input name="nom" required><br>
+            Étoiles:<br>
+            <input type="number" name="etoiles"><br>
+            Image:<br>
+            <input type="file" name="image"><br><br>
+            <button>Ajouter</button>
+        </form>
+        <a href="/joueurs/liste">⬅ Retour</a>
+    `;
+    res.send(renderPage("Ajouter joueur", html));
+});
+app.post("/joueurs/ajouter", upload.single("image"), async (req,res)=>{
+    try {
+        const { nom, etoiles } = req.body;
+        const image = req.file ? req.file.filename : null;
+
+        const { error } = await supabase
+            .from("joueurs")
+            .insert([{ nom, etoiles, image }]);
+
+        if(error) throw error;
+
+        res.redirect("/joueurs/liste");
+
+    } catch(err){
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.get("/joueurs/modifier/:id", async (req,res)=>{
+    const { id } = req.params;
+
+    const { data: joueur } = await supabase
+        .from("joueurs")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+    const html = `
+        <h2>Modifier joueur</h2>
+        <form method="POST" action="/joueurs/modifier/${id}" enctype="multipart/form-data">
+            Nom:<br>
+            <input name="nom" value="${joueur.nom}" required><br>
+            Étoiles:<br>
+            <input type="number" name="etoiles" value="${joueur.etoiles || 0}"><br>
+            Image:<br>
+            <input type="file" name="image"><br><br>
+            <button>Modifier</button>
+        </form>
+        <a href="/joueurs/liste">⬅ Retour</a>
+    `;
+    res.send(renderPage("Modifier joueur", html));
+});
+app.post("/joueurs/modifier/:id", upload.single("image"), async (req,res)=>{
+    try {
+        const { id } = req.params;
+        const { nom, etoiles } = req.body;
+
+        let updateData = { nom, etoiles };
+
+        if(req.file){
+            updateData.image = req.file.filename;
+        }
+
+        const { error } = await supabase
+            .from("joueurs")
+            .update(updateData)
+            .eq("id", id);
+
+        if(error) throw error;
+
+        res.redirect("/joueurs/liste");
+
+    } catch(err){
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.get("/joueurs/supprimer/:id", async (req,res)=>{
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from("joueurs")
+            .delete()
+            .eq("id", id);
+
+        if(error) throw error;
+
+        res.redirect("/joueurs/liste");
+
+    } catch(err){
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+
 
 // ===================== ROUTES SCORES =====================
 app.get("/scores/ajouter", async (req,res)=>{
