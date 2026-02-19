@@ -219,7 +219,9 @@ app.get("/joueurs/ajouter", (req,res)=>{
 });
 app.post("/joueurs/ajouter", upload.single("image"), async (req,res)=>{
     try {
-        const { nom, etoiles } = req.body;
+        const nom = req.body.nom;
+        const etoiles = req.body.etoiles ? parseInt(req.body.etoiles) : null;
+
         const image = req.file ? req.file.filename : null;
 
         const { error } = await supabase
@@ -262,7 +264,9 @@ app.get("/joueurs/modifier/:id", async (req,res)=>{
 app.post("/joueurs/modifier/:id", upload.single("image"), async (req,res)=>{
     try {
         const { id } = req.params;
-        const { nom, etoiles } = req.body;
+        const nom = req.body.nom;
+        const etoiles = req.body.etoiles ? parseInt(req.body.etoiles) : null;
+
 
         let updateData = { nom, etoiles };
 
