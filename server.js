@@ -83,6 +83,7 @@ app.get("/menu", (req,res)=>{
         <li><a href="/jeux/liste">⚔️ Jeux</a></li>
         <li><a href="/joueurs/liste">👥 Joueurs</a></li>
         <li><a href="/scores/ajouter">📊 Ajouter Score</a></li>
+        <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
         <li><a href="/competitions/liste">🏆 Compétitions</a></li>
         <li><a href="/logout">Déconnexion</a></li>
     </ul>`;
@@ -340,6 +341,116 @@ app.post("/scores/ajouter", async (req,res)=>{
         res.redirect("/scores/ajouter");
     } catch(err){ res.send(renderPage("Erreur", err.message)); }
 });
+
+// ===================== MEILLEURS / PIRES JEUX =====================
+app.get("/stats", async (req,res)=>{
+    try {
+        const { data: joueurs, error } = await supabase
+            .from("joueurs")
+            .select("*")
+            .order("nom");
+
+        if(error) throw error;
+
+        let options = joueurs.map(j =>
+            `<option value="${j.id}">${j.nom}</option>`
+        ).join("");
+
+        const html = `
+            <h2>Meilleurs / Pires jeux</h2>
+
+            <form method="GET" action="/stats/resultat">
+                Choisir joueur:<br>
+                <select name="joueur">
+                    <option value="all">Tous les joueurs</option>
+                    ${options}
+                </select><br><br>
+
+                <button>Voir statistiques</button>
+            </form>
+
+            <a href="/menu">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Statistiques", html));
+
+    } catch(err){
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.get("/stats/resultat", async (req,res)=>{
+    try {
+
+        const joueur = req.query.joueur;
+
+        let query = supabase
+            .from("scores")
+            .select(`
+                score,
+                jeux ( id, nom ),
+                joueurs ( id, nom )
+            `);
+
+        if(joueur !== "all"){
+            query = query.eq("joueur_id", joueur);
+        }
+
+        const { data: scores, error } = await query;
+
+        if(error) throw error;
+
+        if(!scores.length){
+            return res.send(renderPage("Stats", "<h3>Aucune donnée disponible</h3><a href='/stats'>⬅ Retour</a>"));
+        }
+
+        // Calcul moyenne par jeu
+        let stats = {};
+
+        scores.forEach(s=>{
+            const nomJeu = s.jeux.nom;
+            if(!stats[nomJeu]){
+                stats[nomJeu] = { total: 0, count: 0 };
+            }
+            stats[nomJeu].total += s.score;
+            stats[nomJeu].count += 1;
+        });
+
+        let resultats = Object.keys(stats).map(jeu=>{
+            return {
+                jeu,
+                moyenne: stats[jeu].total / stats[jeu].count
+            };
+        });
+
+        resultats.sort((a,b)=> b.moyenne - a.moyenne);
+
+        const meilleurs = resultats.slice(0,5);
+        const pires = resultats.slice(-5).reverse();
+
+        let html = "<h2>Résultats</h2>";
+
+        html += "<h3>🏆 Meilleurs jeux</h3><ul>";
+        meilleurs.forEach(j=>{
+            html += `<li>${j.jeu} (${j.moyenne.toFixed(2)})</li>`;
+        });
+        html += "</ul>";
+
+        html += "<h3>💀 Pires jeux</h3><ul>";
+        pires.forEach(j=>{
+            html += `<li>${j.jeu} (${j.moyenne.toFixed(2)})</li>`;
+        });
+        html += "</ul>";
+
+        html += "<a href='/stats'>⬅ Retour</a>";
+
+        res.send(renderPage("Résultats", html));
+
+    } catch(err){
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
 
 // ===================== ROUTES COMPÉTITIONS =====================
 app.get("/competitions/liste", async (req,res)=>{
