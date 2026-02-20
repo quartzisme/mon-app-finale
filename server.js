@@ -46,6 +46,25 @@ function renderPage(title, content){
         <style>
             body { font-size: 20px; line-height: 1.6; font-family: Arial, sans-serif; margin: 10px; }
             input, select, button { font-size: 18px; padding: 5px; margin: 5px 0; }
+            .jeux-table {
+            width: 100%;
+            border-collapse: collapse;
+            }
+
+            .jeux-table th,
+            .jeux-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            }
+
+            .jeux-table tr:nth-child(even) {
+            background-color: #f5f5f5;
+            }
+
+            .jeux-table tr:hover {
+            background-color: #e8f4ff;
+            }
+
         </style>
     </head>
     <body>
@@ -106,54 +125,64 @@ app.get("/api/jeux", async (req,res)=>{
 });
 
 app.get("/jeux/liste", async (req, res) => {
-    try {
+  try {
+    const { data: jeux, error } = await supabase
+      .from("jeux")
+      .select(`
+        id,
+        nom,
+        extensions,
+        min_joueurs,
+        max_joueurs,
+        temps_min,
+        temps_max,
+        statut,
+        scores(score)
+      `)
+      .order("nom");
 
-        const { data: jeux, error } = await supabase
-            .from("jeux")
-            .select("*")
-            .order("nom");
+    if (error) throw error;
 
-        if (error) throw error;
+    let html = `
+    <h2>Liste des jeux</h2>
+    <table class="jeux-table">
+      <tr>
+        <th>Nom</th>
+        <th>Joueurs</th>
+        <th>Temps</th>
+        <th>Statut</th>
+        <th>Moyenne</th>
+      </tr>
+    `;
 
-        let rows = jeux.map(j => `
-            <tr>
-                <td>${j.nom || ""}</td>
-                <td>${j.extensions || ""}</td>
-                <td>${j.min_joueurs || ""}</td>
-                <td>${j.max_joueurs || ""}</td>
-                <td>${j.temps_min || ""}</td>
-                <td>${j.temps_max || ""}</td>
-                <td>${j.statut || ""}</td>
-                <td>-</td>
-            </tr>
-        `).join("");
+    jeux.forEach(j => {
+      let moyenne = "—";
 
-        const html = `
-            <h2>Liste des jeux</h2>
+      if (j.scores && j.scores.length > 0) {
+        const avg =
+          j.scores.reduce((a, b) => a + Number(b.score), 0) /
+          j.scores.length;
+        moyenne = avg.toFixed(2);
+      }
 
-            <table>
-                <tr>
-                    <th>Nom</th>
-                    <th>Extensions</th>
-                    <th>Min joueurs</th>
-                    <th>Max joueurs</th>
-                    <th>Temps min</th>
-                    <th>Temps max</th>
-                    <th>Statut</th>
-                    <th>Moyenne score</th>
-                </tr>
+      html += `
+        <tr>
+          <td>${j.nom}</td>
+          <td>${j.min_joueurs}-${j.max_joueurs}</td>
+          <td>${j.temps_min}-${j.temps_max} min</td>
+          <td>${j.statut || ""}</td>
+          <td><strong>${moyenne}</strong></td>
+        </tr>
+      `;
+    });
 
-                ${rows}
-            </table>
+    html += `</table><a href="/menu">⬅ Retour</a>`;
 
-            <a href="/jeux/menu">⬅ Retour</a>
-        `;
+    res.send(renderPage("Liste des jeux", html));
 
-        res.send(renderPage("Liste des jeux", html));
-
-    } catch (err) {
-        res.send(renderPage("Erreur", err.message));
-    }
+  } catch (err) {
+    res.send(renderPage("Erreur", err.message));
+  }
 });
 
 
@@ -338,7 +367,10 @@ app.post("/scores/ajouter", async (req,res)=>{
         const { jeu_id, joueur_id, score } = req.body;
         const { data, error } = await supabase.from("scores").insert([{ jeu_id, joueur_id, score }]);
         if(error) throw error;
-        res.redirect("/scores/ajouter");
+        res.send(renderPage(
+        "Succès",
+        "<h2>✅ Le score a été enregistré</h2><a href='/menu'>⬅ Retour</a>"
+));
     } catch(err){ res.send(renderPage("Erreur", err.message)); }
 });
 
