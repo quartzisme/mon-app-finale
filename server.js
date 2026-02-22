@@ -75,7 +75,7 @@ function renderPage(title, content){
 
     if (!jeu || !joueur) return;
 
-    const res = await fetch(`/api/score-existant?jeu_id=${jeu}&joueur_id=${joueur}`);
+   
     const data = await res.json();
 
     if (data && data.score !== undefined) {
