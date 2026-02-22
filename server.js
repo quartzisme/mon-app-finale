@@ -67,6 +67,26 @@ function renderPage(title, content){
 
         </style>
     </head>
+    <script>
+    async function verifierScore() {
+    const jeu = document.querySelector('[name="jeu_id"]').value;
+    const joueur = document.querySelector('[name="joueur_id"]').value;
+    const champ = document.getElementById("score");
+
+    if (!jeu || !joueur) return;
+
+    const res = await fetch(`/api/score-existant?jeu_id=${jeu}&joueur_id=${joueur}`);
+    const data = await res.json();
+
+    if (data && data.score !== undefined) {
+        champ.value = data.score;
+    }
+    }
+
+    document.querySelector('[name="jeu_id"]').addEventListener("change", verifierScore);
+    document.querySelector('[name="joueur_id"]').addEventListener("change", verifierScore);
+    </script>
+
     <body>
         ${content}
     </body>
@@ -347,10 +367,12 @@ app.get("/scores/ajouter", async (req,res)=>{
         <form method="POST" action="/scores/ajouter">
             <label>Jeu :</label>
             <select name="jeu_id" required>
+                <option value="">-- Choisir un jeu --</option>
                 ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
             </select><br>
             <label>Joueur :</label>
             <select name="joueur_id" required>
+                <option value="">-- Choisir un joueur --</option>
                 ${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
             </select><br>
             <label>Score :</label>
@@ -362,17 +384,52 @@ app.get("/scores/ajouter", async (req,res)=>{
     } catch(err){ res.send(renderPage("Erreur", err.message)); }
 });
 
-app.post("/scores/ajouter", async (req,res)=>{
-    try {
-        const { jeu_id, joueur_id, score } = req.body;
-        const { data, error } = await supabase.from("scores").insert([{ jeu_id, joueur_id, score }]);
-        if(error) throw error;
-        res.send(renderPage(
-        "Succès",
-        "<h2>✅ Le score a été enregistré</h2><a href='/menu'>⬅ Retour</a>"
-));
-    } catch(err){ res.send(renderPage("Erreur", err.message)); }
+// ================= SCORE EXISTANT =================
+app.get("/api/score-existant", async (req, res) => {
+  try {
+    const { jeu_id, joueur_id } = req.query;
+
+    if (!jeu_id || !joueur_id) return res.json(null);
+
+    const { data, error } = await supabase
+      .from("scores")
+      .select("score")
+      .eq("jeu_id", jeu_id)
+      .eq("joueur_id", joueur_id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err) {
+    res.json(null);
+  }
 });
+
+
+app.post("/scores/ajouter", async (req, res) => {
+  try {
+    const { jeu_id, joueur_id, score } = req.body;
+
+    const { data, error } = await supabase
+      .from("scores")
+      .upsert(
+        [{ jeu_id, joueur_id, score }],
+        { onConflict: "jeu_id,joueur_id" }
+      );
+
+    if (error) throw error;
+
+    res.send(renderPage(
+      "Succès",
+      "<h2>✅ Le score a été enregistré</h2><a href='/menu'>⬅ Retour</a>"
+    ));
+
+  } catch (err) {
+    res.send(renderPage("Erreur", err.message));
+  }
+});
+
 
 // ===================== MEILLEURS / PIRES JEUX =====================
 app.get("/stats", async (req,res)=>{
