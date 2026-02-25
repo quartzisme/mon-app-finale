@@ -96,7 +96,7 @@ function renderPage(title, content){
 // ===================== LOGIN =====================
 app.get("/", (req,res)=>{
     const html = `
-    <h1>Bienvenue</h1>
+    <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
     <form method="POST" action="/login">
         <input name="username" placeholder="Usager" required><br>
         <input name="password" type="password" placeholder="Mot de passe" required><br>
@@ -117,14 +117,16 @@ app.post("/login", (req,res)=>{
 app.get("/menu", (req,res)=>{
     if(!req.session.auth) return res.redirect("/");
     const html = `
-    <h1>Menu principal</h1>
+    <h1>🎲 Jeux de Société</h1>
     <ul>
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:320px;">
         <li><a href="/jeux/liste">⚔️ Jeux</a></li>
         <li><a href="/joueurs/liste">👥 Joueurs</a></li>
         <li><a href="/scores/ajouter">📊 Ajouter Score</a></li>
         <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
         <li><a href="/competitions/liste">🏆 Compétitions</a></li>
         <li><a href="/logout">Déconnexion</a></li>
+    </div>
     </ul>`;
     res.send(renderPage("Menu", html));
 });
@@ -165,8 +167,10 @@ app.get("/jeux/liste", async (req, res) => {
 
     let html = `
     <h2>Liste des jeux</h2>
+    
     <table class="jeux-table">
       <tr>
+        <th>id</th>
         <th>Nom</th>
         <th>Joueurs</th>
         <th>Temps</th>
@@ -174,6 +178,8 @@ app.get("/jeux/liste", async (req, res) => {
         <th>Moyenne</th>
       </tr>
     `;
+
+    html += `</table><a href="/menu">⬅ Retour</a>`;
 
     jeux.forEach(j => {
       let moyenne = "—";
@@ -187,6 +193,7 @@ app.get("/jeux/liste", async (req, res) => {
 
       html += `
         <tr>
+          <td>${j.id}</td>
           <td>${j.nom}</td>
           <td>${j.min_joueurs}-${j.max_joueurs}</td>
           <td>${j.temps_min}-${j.temps_max} min</td>
@@ -217,7 +224,7 @@ app.get("/joueurs/liste", async (req,res)=>{
         if(error) throw error;
 
         let rows = joueurs.map(j => `
-            <tr>
+            <tr style="border-bottom:1px solid #ccc;">
                 <td>
                     ${j.image ? `<img src="/images/${j.image}" width="80"><br>` : ""}
                     ${j.nom}
@@ -359,30 +366,73 @@ app.get("/joueurs/supprimer/:id", async (req,res)=>{
 
 
 // ===================== ROUTES SCORES =====================
-app.get("/scores/ajouter", async (req,res)=>{
-    try {
-        const { data: jeux } = await supabase.from("jeux").select("id, nom").order("nom");
-        const { data: joueurs } = await supabase.from("joueurs").select("id, nom").order("nom");
-        let html = `<h2>Ajouter un score</h2>
-        <form method="POST" action="/scores/ajouter">
-            <label>Jeu :</label>
-            <select name="jeu_id" required>
-                <option value="">-- Choisir un jeu --</option>
-                ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
-            </select><br>
-            <label>Joueur :</label>
-            <select name="joueur_id" required>
-                <option value="">-- Choisir un joueur --</option>
-                ${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
-            </select><br>
-            <label>Score :</label>
-            <input type="number" step="0.5" name="score" required><br>
-            <button>Ajouter</button>
-        </form>
-        <a href='/menu'>⬅ Retour</a>`;
-        res.send(renderPage("Ajouter Score", html));
-    } catch(err){ res.send(renderPage("Erreur", err.message)); }
+let html = `<h2>Ajouter un score</h2>
+<form method="POST" action="/scores/ajouter">
+    <label>Jeu :</label>
+    <select name="jeu_id" required>
+        <option value="">-- Choisir un jeu --</option>
+        ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
+    </select><br>
+
+    <label>Joueur :</label>
+    <select name="joueur_id" required>
+        <option value="">-- Choisir un joueur --</option>
+        ${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
+    </select><br>
+
+    <div id="scoresJeu" style="margin:10px 0;"></div>
+    <div id="scoreJoueur" style="margin:10px 0; font-weight:bold;"></div>
+
+    <label>Score :</label>
+    <input type="number" step="0.5" name="score" required><br>
+    <button>Ajouter</button>
+</form>
+
+<a href='/menu'>⬅ Retour</a>
+
+<script>
+async function majInfosScore() {
+  const jeu = document.querySelector("[name='jeu_id']").value;
+  const joueur = document.querySelector("[name='joueur_id']").value;
+
+  if (!jeu) return;
+
+  try {
+    const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + jeu);
+    const data1 = await res1.json();
+
+    const divJeu = document.getElementById("scoresJeu");
+
+    if (!data1 || data1.length === 0) {
+      divJeu.innerHTML = "Aucun score pour ce jeu";
+    } else {
+      divJeu.innerHTML =
+        "<b>Scores existants :</b><br>" +
+        data1.map(s => s.joueurs.nom + " : " + s.score).join("<br>");
+    }
+
+    if (!joueur) return;
+
+    const res2 = await fetch('/api/score-existant?jeu_id=' + jeu + '&joueur_id=' + joueur);
+    const data2 = await res2.json();
+
+    const divJoueur = document.getElementById("scoreJoueur");
+
+    if (data2.score !== null) {
+      divJoueur.innerHTML = "⚠️ Ce joueur a déjà donné : <b>" + data2.score + "</b>";
+    } else {
+      divJoueur.innerHTML = "";
+    }
+  } catch(e) {
+    console.log("Erreur preview scores", e);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelector("[name='jeu_id']").addEventListener("change", majInfosScore);
+  document.querySelector("[name='joueur_id']").addEventListener("change", majInfosScore);
 });
+</script>`;
 
 // ================= SCORE EXISTANT =================
 app.get("/api/score-existant", async (req, res) => {
@@ -422,7 +472,7 @@ app.post("/scores/ajouter", async (req, res) => {
 
     res.send(renderPage(
       "Succès",
-      "<h2>✅ Le score a été enregistré</h2><a href='/menu'>⬅ Retour</a>"
+      "<h2>✅ Le score a été enregistré</h2><a href='/scores/ajouter'>⬅ Retour</a>"
     ));
 
   } catch (err) {
@@ -430,6 +480,27 @@ app.post("/scores/ajouter", async (req, res) => {
   }
 });
 
+// ================= SCORE(S) SI EXISTANT =================
+app.get("/api/scores-par-jeu", async (req, res) => {
+  try {
+    const { jeu_id } = req.query;
+
+    const { data, error } = await supabase
+      .from("scores")
+      .select(`
+        score,
+        joueurs (nom)
+      `)
+      .eq("jeu_id", jeu_id);
+
+    if (error) throw error;
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ===================== MEILLEURS / PIRES JEUX =====================
 app.get("/stats", async (req,res)=>{
