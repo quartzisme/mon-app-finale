@@ -179,8 +179,7 @@ app.get("/jeux/liste", async (req, res) => {
       </tr>
     `;
 
-    html += `</table><a href="/menu">⬅ Retour</a>`;
-
+    // ✅ LIGNES DU TABLEAU
     jeux.forEach(j => {
       let moyenne = "—";
 
@@ -203,6 +202,7 @@ app.get("/jeux/liste", async (req, res) => {
       `;
     });
 
+    // ✅ fermer le tableau À LA FIN
     html += `</table><a href="/menu">⬅ Retour</a>`;
 
     res.send(renderPage("Liste des jeux", html));
@@ -427,18 +427,32 @@ async function majInfosScore() {
         data1.map(s => s.joueurs.nom + " : " + s.score).join("<br>");
     }
 
-    if (!joueur) return;
+// ===== SCORES DU JOUEUR =====
+if (joueur) {
+  const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + joueur);
+  const dataJ = await resJ.json();
 
+  const divJoueur = document.getElementById("scoreJoueur");
+
+  if (!dataJ || dataJ.length === 0) {
+    divJoueur.innerHTML = "Aucun score pour ce joueur";
+  } else {
+    divJoueur.innerHTML =
+      "<b>Scores du joueur :</b><br>" +
+      dataJ.map(s => s.jeux.nom + " : " + s.score).join("<br>");
+  }
+
+  // ===== vérifier score existant pour CE jeu =====
+  if (jeu) {
     const res2 = await fetch('/api/score-existant?jeu_id=' + jeu + '&joueur_id=' + joueur);
     const data2 = await res2.json();
 
-    const divJoueur = document.getElementById("scoreJoueur");
-
     if (data2 && data2.score !== null) {
-      divJoueur.innerHTML = "⚠️ Ce joueur a déjà donné : <b>" + data2.score + "</b>";
-    } else {
-      divJoueur.innerHTML = "";
+      divJoueur.innerHTML +=
+        "<br>⚠️ Déjà noté pour ce jeu : <b>" + data2.score + "</b>";
     }
+  }
+}
 
   } catch(e) {
     console.log("Erreur preview scores", e);
@@ -517,6 +531,27 @@ app.get("/api/scores-par-jeu", async (req, res) => {
         joueurs (nom)
       `)
       .eq("jeu_id", jeu_id);
+
+    if (error) throw error;
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// ================= SCORES PAR JOUEUR =================
+app.get("/api/scores-par-joueur", async (req, res) => {
+  try {
+    const { joueur_id } = req.query;
+
+    const { data, error } = await supabase
+      .from("scores")
+      .select(`
+        score,
+        jeux (nom)
+      `)
+      .eq("joueur_id", joueur_id);
 
     if (error) throw error;
 
