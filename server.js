@@ -364,28 +364,44 @@ app.get("/joueurs/supprimer/:id", async (req,res)=>{
 });
 
 
-
 // ===================== ROUTES SCORES =====================
-let html = `<h2>Ajouter un score</h2>
+app.get("/scores/ajouter", async (req,res)=>{
+  try {
+
+    const { data: jeux } = await supabase
+      .from("jeux")
+      .select("id, nom")
+      .order("nom");
+
+    const { data: joueurs } = await supabase
+      .from("joueurs")
+      .select("id, nom")
+      .order("nom");
+
+    const html = `
+<h2>Ajouter un score</h2>
+
 <form method="POST" action="/scores/ajouter">
-    <label>Jeu :</label>
-    <select name="jeu_id" required>
-        <option value="">-- Choisir un jeu --</option>
-        ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
-    </select><br>
 
-    <label>Joueur :</label>
-    <select name="joueur_id" required>
-        <option value="">-- Choisir un joueur --</option>
-        ${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
-    </select><br>
+<label>Jeu :</label>
+<select name="jeu_id" required>
+<option value="">-- Choisir un jeu --</option>
+${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
+</select><br>
 
-    <div id="scoresJeu" style="margin:10px 0;"></div>
-    <div id="scoreJoueur" style="margin:10px 0; font-weight:bold;"></div>
+<label>Joueur :</label>
+<select name="joueur_id" required>
+<option value="">-- Choisir un joueur --</option>
+${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
+</select><br>
 
-    <label>Score :</label>
-    <input type="number" step="0.5" name="score" required><br>
-    <button>Ajouter</button>
+<div id="scoresJeu" style="margin:10px 0;"></div>
+<div id="scoreJoueur" style="margin:10px 0; font-weight:bold;"></div>
+
+<label>Score :</label>
+<input type="number" step="0.5" name="score" required><br>
+
+<button>Ajouter</button>
 </form>
 
 <a href='/menu'>⬅ Retour</a>
@@ -418,11 +434,12 @@ async function majInfosScore() {
 
     const divJoueur = document.getElementById("scoreJoueur");
 
-    if (data2.score !== null) {
+    if (data2 && data2.score !== null) {
       divJoueur.innerHTML = "⚠️ Ce joueur a déjà donné : <b>" + data2.score + "</b>";
     } else {
       divJoueur.innerHTML = "";
     }
+
   } catch(e) {
     console.log("Erreur preview scores", e);
   }
@@ -432,7 +449,15 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelector("[name='jeu_id']").addEventListener("change", majInfosScore);
   document.querySelector("[name='joueur_id']").addEventListener("change", majInfosScore);
 });
-</script>`;
+</script>
+`;
+
+    res.send(renderPage("Ajouter Score", html));
+
+  } catch(err){
+    res.send(renderPage("Erreur", err.message));
+  }
+});
 
 // ================= SCORE EXISTANT =================
 app.get("/api/score-existant", async (req, res) => {
