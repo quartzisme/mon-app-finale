@@ -95,6 +95,15 @@ function renderPage(title, content){
                 max-width: 400px;
                 box-sizing: border-box;
             }
+
+            .result-box {
+                background: #f8fbff;
+                border-left: 5px solid #2b7cff;
+                padding: 10px 12px;
+                margin: 12px 0;
+                border-radius: 6px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            }
         </style>
     </head>
     <script>
@@ -210,9 +219,6 @@ app.get("/jeux/liste", async (req, res) => {
         <th>Moyenne</th>
       </tr>
     `;
-
-    // ✅ DÉBUT DU TABLEAU
-    html += `</table><a href="/menu">⬅ Retour</a>`;
 
     // ✅ LIGNES DU TABLEAU
     jeux.forEach(j => {
@@ -430,13 +436,14 @@ ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
 ${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
 </select><br>
 
-<div id="scoresJeu" style="margin:10px 0;"></div>
-<div id="scoreJoueur" style="margin:10px 0; font-weight:bold;"></div>
-
 <label>Score :</label>
 <input type="number" step="0.5" name="score" required><br>
 
 <button>Ajouter</button>
+
+<div id="scoresJeu" class="result-box"></div>
+<div id="scoreJoueur" class="result-box" style="display:none;"></div>
+
 </form>
 
 <a href='/menu'>⬅ Retour</a>
@@ -470,27 +477,31 @@ async function majInfosScore() {
     divJeu.innerHTML = "";
   }
 
-  // ================= SCORES DU JOUEUR =================
-  if (joueur) {
-    try {
-      const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + joueur);
-      const dataJ = await resJ.json();
+// ================= SCORES DU JOUEUR ================= 
+if (joueur) {
+  try {
+    const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + joueur);
+    const dataJ = await resJ.json();
 
-      if (!dataJ || dataJ.length === 0) {
-        divJoueur.innerHTML =
-          "<div class='box-info'>Ce joueur n'a encore donné aucun score.</div>";
-      } else {
-        divJoueur.innerHTML =
-          "<div class='box-info'><b>Scores de ce joueur :</b><br>" +
-          dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>") +
-          "</div>";
-      }
-    } catch (e) {
-      console.log("Erreur scores joueur", e);
+    if (!dataJ || dataJ.length === 0) {
+      divJoueur.style.display = "block";
+      divJoueur.innerHTML =
+        "<b>Ce joueur n'a encore donné aucun score.</b>";
+    } else {
+      divJoueur.style.display = "block";
+      divJoueur.innerHTML =
+        "<b>Scores de ce joueur :</b><br>" +
+        dataJ.map(s =>
+          (s.jeux?.nom || "Jeu inconnu") + " : " + s.score
+        ).join("<br>");
     }
-  } else {
-    divJoueur.innerHTML = "";
+  } catch (e) {
+    console.log("Erreur scores joueur", e);
   }
+} else {
+  divJoueur.style.display = "none";
+  divJoueur.innerHTML = "";
+}
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -613,16 +624,57 @@ app.get("/stats", async (req,res)=>{
         const html = `
             <h2>🥇 Meilleurs / 💀 Pires jeux</h2>
 
-            <form method="GET" action="/stats/resultat">
-                Choisir joueur:<br>
-                <select name="joueur">
-                    <option value="all">Tous les joueurs</option>
-                    ${options}
-                </select><br><br>
+        <form id="formStats">
+            Choisir joueur:<br>
+            <select name="joueur" id="choixJoueur">
+                <option value="">-- Choisir --</option>
+                <option value="all">Tous les joueurs</option>
+                ${options}
+            </select>
+        </form>
 
-                <button>Voir statistiques</button>
-            </form>
+        <script>
+document.getElementById("choixJoueur").addEventListener("change", async function () {
+  const joueur = this.value;
+  const div = document.getElementById("resultatsStats");
 
+  if (!joueur) {
+    div.innerHTML = "";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/stats?joueur=" + joueur);
+    const data = await res.json();
+
+    if (!data || !data.meilleurs) {
+      div.innerHTML = "<div class='result-box'>Aucune donnée</div>";
+      return;
+    }
+
+    let html = "";
+
+    html += "<div class='result-box'><h3>🏆 Meilleurs jeux</h3>";
+    data.meilleurs.forEach(j => {
+      html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
+    });
+    html += "</div>";
+
+    html += "<div class='result-box'><h3>💀 Pires jeux</h3>";
+    data.pires.forEach(j => {
+      html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
+    });
+    html += "</div>";
+
+    div.innerHTML = html;
+
+  } catch (e) {
+    div.innerHTML = "<div class='result-box'>Erreur</div>";
+  }
+});
+</script>
+
+<div id="resultatsStats"></div>
             <a href="/menu">⬅ Retour</a>
         `;
 
@@ -716,6 +768,57 @@ app.get("/competitions/liste", async (req,res)=>{
         res.send(renderPage("Compétitions", html));
     } catch(err){ res.send(renderPage("Erreur", err.message)); }
 });
+
+
+// =========== ROUTE STATS ===============
+app.get("/api/stats", async (req,res)=>{
+  try {
+    const joueur = req.query.joueur;
+
+    let query = supabase
+      .from("scores")
+      .select(`
+        score,
+        jeux ( nom )
+      `);
+
+    if (joueur !== "all") {
+      query = query.eq("joueur_id", joueur);
+    }
+
+    const { data: scores, error } = await query;
+    if (error) throw error;
+
+    if (!scores.length) return res.json({ meilleurs: [], pires: [] });
+
+    let stats = {};
+
+    scores.forEach(s=>{
+      const nomJeu = s.jeux.nom;
+      if(!stats[nomJeu]) stats[nomJeu] = { total:0, count:0 };
+      stats[nomJeu].total += s.score;
+      stats[nomJeu].count += 1;
+    });
+
+    let resultats = Object.keys(stats).map(jeu=>({
+      jeu,
+      moyenne: stats[jeu].total / stats[jeu].count
+    }));
+
+    resultats.sort((a,b)=> b.moyenne - a.moyenne);
+
+    res.json({
+      meilleurs: resultats.slice(0,5),
+      pires: resultats.slice(-5).reverse()
+    });
+
+  } catch(err){
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===================== SERVEUR =====================
+const PORT = process.env.PORT || 3000;
 
 // ===================== SERVEUR =====================
 const PORT = process.env.PORT || 3000;
