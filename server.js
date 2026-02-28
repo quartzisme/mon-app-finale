@@ -65,6 +65,14 @@ function renderPage(title, content){
             background-color: #e8f4ff;
             }
 
+            .box-info {
+                background: #f4f6f8;
+                border-left: 6px solid #4a90e2;
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 6px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            }
         </style>
     </head>
     <script>
@@ -379,7 +387,7 @@ app.get("/scores/ajouter", async (req,res)=>{
       .order("nom");
 
     const html = `
-<h2>Ajouter un score</h2>
+<h2>📊 Ajouter un score</h2>
 
 <form method="POST" action="/scores/ajouter">
 
@@ -411,51 +419,50 @@ async function majInfosScore() {
   const jeu = document.querySelector("[name='jeu_id']").value;
   const joueur = document.querySelector("[name='joueur_id']").value;
 
-  if (!jeu) return;
-
-  try {
-    const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + jeu);
-    const data1 = await res1.json();
-
-    const divJeu = document.getElementById("scoresJeu");
-
-    if (!data1 || data1.length === 0) {
-      divJeu.innerHTML = "Aucun score pour ce jeu";
-    } else {
-      divJeu.innerHTML =
-        "<b>Scores existants :</b><br>" +
-        data1.map(s => s.joueurs.nom + " : " + s.score).join("<br>");
-    }
-
-// ===== SCORES DU JOUEUR =====
-if (joueur) {
-  const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + joueur);
-  const dataJ = await resJ.json();
-
+  const divJeu = document.getElementById("scoresJeu");
   const divJoueur = document.getElementById("scoreJoueur");
 
-  if (!dataJ || dataJ.length === 0) {
-    divJoueur.innerHTML = "Aucun score pour ce joueur";
-  } else {
-    divJoueur.innerHTML =
-      "<b>Scores du joueur :</b><br>" +
-      dataJ.map(s => s.jeux.nom + " : " + s.score).join("<br>");
-  }
-
-  // ===== vérifier score existant pour CE jeu =====
+  // ================= SCORES DU JEU =================
   if (jeu) {
-    const res2 = await fetch('/api/score-existant?jeu_id=' + jeu + '&joueur_id=' + joueur);
-    const data2 = await res2.json();
+    try {
+      const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + jeu);
+      const data1 = await res1.json();
 
-    if (data2 && data2.score !== null) {
-      divJoueur.innerHTML +=
-        "<br>⚠️ Déjà noté pour ce jeu : <b>" + data2.score + "</b>";
+      if (!data1 || data1.length === 0) {
+        divJeu.innerHTML = "<div class='box-info'>Aucun score pour ce jeu</div>";
+      } else {
+        divJeu.innerHTML =
+          "<div class='box-info'><b>Scores existants :</b><br>" +
+          data1.map(s => s.joueurs.nom + " : " + s.score).join("<br>") +
+          "</div>";
+      }
+    } catch (e) {
+      console.log("Erreur scores jeu", e);
     }
+  } else {
+    divJeu.innerHTML = "";
   }
-}
 
-  } catch(e) {
-    console.log("Erreur preview scores", e);
+  // ================= SCORES DU JOUEUR =================
+  if (joueur) {
+    try {
+      const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + joueur);
+      const dataJ = await resJ.json();
+
+      if (!dataJ || dataJ.length === 0) {
+        divJoueur.innerHTML =
+          "<div class='box-info'>Ce joueur n'a encore donné aucun score.</div>";
+      } else {
+        divJoueur.innerHTML =
+          "<div class='box-info'><b>Scores de ce joueur :</b><br>" +
+          dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>") +
+          "</div>";
+      }
+    } catch (e) {
+      console.log("Erreur scores joueur", e);
+    }
+  } else {
+    divJoueur.innerHTML = "";
   }
 }
 
