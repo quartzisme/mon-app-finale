@@ -44,7 +44,23 @@ function renderPage(title, content){
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${title}</title>
         <style>
-            body { font-size: 20px; line-height: 1.6; font-family: Arial, sans-serif; margin: 10px; }
+          body {
+            font-size: 20px;
+            line-height: 1.6;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f2f2f2;
+            }
+
+            .page-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 15px;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }
+
             input, select, button { font-size: 18px; padding: 5px; margin: 5px 0; }
             .jeux-table {
             width: 100%;
@@ -73,6 +89,12 @@ function renderPage(title, content){
                 border-radius: 6px;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.15);
             }
+
+            input, select, button {
+                width: 100%;
+                max-width: 400px;
+                box-sizing: border-box;
+            }
         </style>
     </head>
     <script>
@@ -96,7 +118,9 @@ function renderPage(title, content){
     </script>
 
     <body>
+    <div class="page-container">
         ${content}
+    </div>
     </body>
     </html>`;
 }
@@ -174,7 +198,7 @@ app.get("/jeux/liste", async (req, res) => {
     if (error) throw error;
 
     let html = `
-    <h2>Liste des jeux</h2>
+    <h2>⚔️ Liste des jeux</h2>
     
     <table class="jeux-table">
       <tr>
@@ -186,6 +210,9 @@ app.get("/jeux/liste", async (req, res) => {
         <th>Moyenne</th>
       </tr>
     `;
+
+    // ✅ DÉBUT DU TABLEAU
+    html += `</table><a href="/menu">⬅ Retour</a>`;
 
     // ✅ LIGNES DU TABLEAU
     jeux.forEach(j => {
@@ -246,7 +273,7 @@ app.get("/joueurs/liste", async (req,res)=>{
         `).join("");
 
         const html = `
-            <h2>Gestion des joueurs</h2>
+            <h2>👥 Gestion des joueurs</h2>
             <a href="/joueurs/ajouter">➕ Ajouter joueur</a>
             <table>
                 <tr>
@@ -584,7 +611,7 @@ app.get("/stats", async (req,res)=>{
         ).join("");
 
         const html = `
-            <h2>Meilleurs / Pires jeux</h2>
+            <h2>🥇 Meilleurs / 💀 Pires jeux</h2>
 
             <form method="GET" action="/stats/resultat">
                 Choisir joueur:<br>
