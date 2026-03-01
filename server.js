@@ -67,6 +67,11 @@ function renderPage(title, content){
             border-collapse: collapse;
             }
 
+            ul {
+            list-style: none;
+            padding-left: 0;
+            }
+            
             .jeux-table th,
             .jeux-table td {
             border: 1px solid #ccc;
@@ -103,6 +108,7 @@ function renderPage(title, content){
                 margin: 12px 0;
                 border-radius: 6px;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+                display: none;
             }
         </style>
     </head>
@@ -163,8 +169,9 @@ app.get("/menu", (req,res)=>{
     <div style="display:flex; flex-direction:column; gap:12px; max-width:320px;">
         <li><a href="/jeux/liste">⚔️ Jeux</a></li>
         <li><a href="/joueurs/liste">👥 Joueurs</a></li>
-        <li><a href="/scores/ajouter">📊 Ajouter Score</a></li>
+        <li><a href="/scores/ajouter">📊 Scores</a></li>
         <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
+        <li><a href="/filtrages">🔍 Filtrages</a></li>
         <li><a href="/competitions/liste">🏆 Compétitions</a></li>
         <li><a href="/logout">Déconnexion</a></li>
     </div>
@@ -207,8 +214,10 @@ app.get("/jeux/liste", async (req, res) => {
     if (error) throw error;
 
     let html = `
-    <h2>⚔️ Liste des jeux</h2>
-    
+
+    <h2>Liste des jeux</h2>
+    <a href="/menu">⬅ Retour</a><br><br>
+
     <table class="jeux-table">
       <tr>
         <th>id</th>
@@ -279,19 +288,22 @@ app.get("/joueurs/liste", async (req,res)=>{
         `).join("");
 
         const html = `
-            <h2>👥 Gestion des joueurs</h2>
-            <a href="/joueurs/ajouter">➕ Ajouter joueur</a>
-            <table>
-                <tr>
-                    <th>Nom</th>
-                    <th>Étoiles</th>
-                    <th>Actions</th>
-                </tr>
-                ${rows}
-            </table>
-            <a href="/menu">⬅ Retour</a>
-        `;
+        <h2>👥 Gestion des joueurs</h2>
+        <button><a href="/joueurs/ajouter">➕ Ajouter joueur</a></button>
 
+        <div class="result-box">
+            <table>
+            <tr>
+                <th>Nom</th>
+                <th>Étoiles</th>
+                <th>Actions</th>
+            </tr>
+            ${rows}
+            </table>
+        </div>
+
+        <a href="/menu">⬅ Retour</a>
+        `;
         res.send(renderPage("Joueurs", html));
 
     } catch(err){
@@ -420,7 +432,7 @@ app.get("/scores/ajouter", async (req,res)=>{
       .order("nom");
 
     const html = `
-<h2>📊 Ajouter un score</h2>
+<h2>📊 Ajouter / Modifier un score</h2>
 
 <form method="POST" action="/scores/ajouter">
 
@@ -439,7 +451,7 @@ ${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
 <label>Score :</label>
 <input type="number" step="0.5" name="score" required><br>
 
-<button>Ajouter</button>
+<button>Ajouter / Modifier</button>
 
 <div id="scoresJeu" class="result-box"></div>
 <div id="scoreJoueur" class="result-box" style="display:none;"></div>
@@ -464,17 +476,20 @@ async function majInfosScore() {
 
       if (!data1 || data1.length === 0) {
         divJeu.innerHTML = "<div class='box-info'>Aucun score pour ce jeu</div>";
+        divJeu.style.display = "block";
       } else {
         divJeu.innerHTML =
           "<div class='box-info'><b>Scores existants :</b><br>" +
           data1.map(s => s.joueurs.nom + " : " + s.score).join("<br>") +
           "</div>";
+          divJeu.style.display = "block";
       }
     } catch (e) {
       console.log("Erreur scores jeu", e);
     }
   } else {
     divJeu.innerHTML = "";
+    divJoueur.style.display = "none";
   }
 
 // ================= SCORES DU JOUEUR ================= 
@@ -622,7 +637,7 @@ app.get("/stats", async (req,res)=>{
         ).join("");
 
         const html = `
-            <h2>🥇 Meilleurs / 💀 Pires jeux</h2>
+            <h2>🥇 / 💀 Top jeux</h2>
 
         <form id="formStats">
             Choisir joueur:<br>
