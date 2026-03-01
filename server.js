@@ -108,7 +108,6 @@ function renderPage(title, content){
                 margin: 12px 0;
                 border-radius: 6px;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-                display: none;
             }
         </style>
     </head>
@@ -215,7 +214,7 @@ app.get("/jeux/liste", async (req, res) => {
 
     let html = `
 
-    <h2>Liste des jeux</h2>
+    <h2>⚔️ Liste des jeux</h2>
     <a href="/menu">⬅ Retour</a><br><br>
 
     <table class="jeux-table">
@@ -289,7 +288,7 @@ app.get("/joueurs/liste", async (req,res)=>{
 
         const html = `
         <h2>👥 Gestion des joueurs</h2>
-        <button><a href="/joueurs/ajouter">➕ Ajouter joueur</a></button>
+        <button><a href="/joueurs/ajouter">Ajouter joueur</a></button>
 
         <div class="result-box">
             <table>
@@ -474,22 +473,23 @@ async function majInfosScore() {
       const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + jeu);
       const data1 = await res1.json();
 
-      if (!data1 || data1.length === 0) {
-        divJeu.innerHTML = "<div class='box-info'>Aucun score pour ce jeu</div>";
-        divJeu.style.display = "block";
-      } else {
-        divJeu.innerHTML =
-          "<div class='box-info'><b>Scores existants :</b><br>" +
-          data1.map(s => s.joueurs.nom + " : " + s.score).join("<br>") +
-          "</div>";
-          divJeu.style.display = "block";
-      }
+    if (!data1 || data1.length === 0) {
+    divJeu.innerHTML = "Aucun score pour ce jeu";
+    divJeu.className = "result-box";
+    divJeu.style.display = "block";
+    } else {
+    divJeu.innerHTML =
+        "<b>Scores existants :</b><br>" +
+        data1.map(s => s.joueurs.nom + " : " + s.score).join("<br>");
+    divJeu.className = "result-box";
+    divJeu.style.display = "block";
+    }
     } catch (e) {
       console.log("Erreur scores jeu", e);
     }
   } else {
     divJeu.innerHTML = "";
-    divJoueur.style.display = "none";
+    divJeu.style.display = "none";
   }
 
 // ================= SCORES DU JOUEUR ================= 
@@ -637,7 +637,7 @@ app.get("/stats", async (req,res)=>{
         ).join("");
 
         const html = `
-            <h2>🥇 / 💀 Top jeux</h2>
+            <h2>🥇 Top jeux 💀</h2>
 
         <form id="formStats">
             Choisir joueur:<br>
@@ -647,6 +647,7 @@ app.get("/stats", async (req,res)=>{
                 ${options}
             </select>
         </form>
+        <div id="resultatsStats"></div>
 
         <script>
 document.getElementById("choixJoueur").addEventListener("change", async function () {
