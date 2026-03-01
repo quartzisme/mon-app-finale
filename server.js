@@ -281,14 +281,17 @@ app.get("/joueurs/liste", async (req,res)=>{
                 <td>${j.etoiles || 0}</td>
                 <td>
                     <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
-                    <a href="/joueurs/supprimer/${j.id}">🗑 Supprimer</a>
+                    <a href="/joueurs/supprimer/${j.id}"
+                    onclick="return confirm('Supprimer ce joueur ?')">
+                    🗑 Supprimer
+                    </a>
                 </td>
             </tr>
         `).join("");
 
         const html = `
         <h2>👥 Gestion des joueurs</h2>
-        <button><a href="/joueurs/ajouter">Ajouter joueur</a></button>
+        <button><a href="/joueurs/ajouter">Ajouter un joueur</a></button>
 
         <div class="result-box">
             <table>
@@ -650,7 +653,11 @@ app.get("/stats", async (req,res)=>{
         <div id="resultatsStats"></div>
 
         <script>
-document.getElementById("choixJoueur").addEventListener("change", async function () {
+        
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("choixJoueur").addEventListener("change", async function () {
+  });
+});
   const joueur = this.value;
   const div = document.getElementById("resultatsStats");
 
@@ -792,11 +799,14 @@ app.get("/api/stats", async (req,res)=>{
     const joueur = req.query.joueur;
 
     let query = supabase
-      .from("scores")
-      .select(`
+    .from("scores")
+    .select(`
         score,
-        jeux ( nom )
-      `);
+        joueur_id,
+        jeux ( nom ),
+        joueurs ( id, nom )
+    `)
+    .not("joueurs.id", "is", null);
 
     if (joueur !== "all") {
       query = query.eq("joueur_id", joueur);
