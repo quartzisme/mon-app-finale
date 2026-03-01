@@ -102,7 +102,7 @@ function renderPage(title, content){
             }
 
             .result-box {
-                background: #bfc0c2;
+                background: #dddee0;
                 border-left: 5px solid #2b7cff;
                 padding: 10px 12px;
                 margin: 12px 0;
@@ -273,7 +273,7 @@ app.get("/joueurs/liste", async (req,res)=>{
         if(error) throw error;
 
 let rows = joueurs.map(j => `
-  <div class="result-box" style="margin-bottom:15px;">
+  
     <table style="width:100%;">
       <tr>
         <td style="width:120px; text-align:center;">
@@ -297,7 +297,7 @@ let rows = joueurs.map(j => `
         </td>
       </tr>
     </table>
-  </div>
+ 
 `).join("");
 
         const html = `
