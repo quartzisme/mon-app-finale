@@ -228,6 +228,35 @@ app.get("/jeux/liste", async (req, res) => {
       </tr>
     `;
 
+// ================= MEILLEUR JEU PAR JOUEUR =================
+app.get("/api/meilleur-jeu", async (req,res)=>{
+  try {
+    const { joueur_id } = req.query;
+
+    const { data, error } = await supabase
+      .from("scores")
+      .select(`
+        score,
+        jeux ( nom )
+      `)
+      .eq("joueur_id", joueur_id);
+
+    if (error) throw error;
+    if (!data || !data.length) return res.json([]);
+
+    const max = Math.max(...data.map(s => Number(s.score)));
+
+    const meilleurs = data
+      .filter(s => Number(s.score) === max)
+      .map(s => s.jeux.nom);
+
+    res.json(meilleurs);
+
+  } catch(err){
+    res.json([]);
+  }
+});
+
     // ✅ LIGNES DU TABLEAU
     jeux.forEach(j => {
       let moyenne = "—";
@@ -272,22 +301,33 @@ app.get("/joueurs/liste", async (req,res)=>{
 
         if(error) throw error;
 
-        let rows = joueurs.map(j => `
-            <tr style="border-bottom:1px solid #ccc;">
-                <td>
-                    ${j.image ? `<img src="/images/${j.image}" width="80"><br>` : ""}
-                    ${j.nom}
-                </td>
-                <td>${j.etoiles || 0}</td>
-                <td>
-                    <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
-                    <a href="/joueurs/supprimer/${j.id}"
-                    onclick="return confirm('Supprimer ce joueur ?')">
-                    🗑 Supprimer
-                    </a>
-                </td>
-            </tr>
-        `).join("");
+let rows = joueurs.map(j => `
+  <div class="result-box" style="margin-bottom:15px;">
+    <table style="width:100%;">
+      <tr>
+        <td style="width:120px; text-align:center;">
+          ${j.image ? `<img src="/images/${j.image}" width="80"><br>` : ""}
+          <strong>${j.nom}</strong>
+        </td>
+
+        <td style="text-align:center; width:120px;">
+          ⭐ ${j.etoiles || 0}
+        </td>
+
+        <td>
+          <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
+          &nbsp;|&nbsp;
+          <a href="/joueurs/supprimer/${j.id}"
+             onclick="return confirm('Supprimer ce joueur ?');">
+             🗑 Supprimer
+          </a>
+          <br>
+          <small id="best-${j.id}">Chargement meilleur jeu...</small>
+        </td>
+      </tr>
+    </table>
+  </div>
+`).join("");
 
         const html = `
         <h2>👥 Gestion des joueurs</h2>
@@ -329,6 +369,30 @@ app.get("/joueurs/ajouter", (req,res)=>{
     `;
     res.send(renderPage("Ajouter joueur", html));
 });
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  const joueurs = document.querySelectorAll("[id^='best-']");
+
+  for (const el of joueurs) {
+    const id = el.id.replace("best-", "");
+
+    try {
+      const res = await fetch("/api/meilleur-jeu?joueur_id=" + id);
+      const data = await res.json();
+
+      if (!data || data.length === 0) {
+        el.innerHTML = "Aucun score";
+      } else {
+        el.innerHTML = "🏆 " + data.join(", ");
+      }
+    } catch {
+      el.innerHTML = "—";
+    }
+  }
+});
+</script>
+
 app.post("/joueurs/ajouter", upload.single("image"), async (req,res)=>{
     try {
         const nom = req.body.nom;
@@ -450,6 +514,8 @@ ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
 ${joueurs.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
 </select><br>
 
+<div id="carteJoueur" style="margin:10px 0;"></div>
+
 <label>Score :</label>
 <input type="number" step="0.5" name="score" required><br>
 
@@ -470,6 +536,7 @@ async function majInfosScore() {
   const divJeu = document.getElementById("scoresJeu");
   const divJoueur = document.getElementById("scoreJoueur");
 
+  
   // ================= SCORES DU JEU =================
   if (jeu) {
     try {
@@ -499,6 +566,26 @@ async function majInfosScore() {
 if (joueur) {
   try {
     const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + joueur);
+
+// ================= JOUEUR INFO =================
+app.get("/api/joueur", async (req,res)=>{
+  try {
+    const { id } = req.query;
+
+    const { data, error } = await supabase
+      .from("joueurs")
+      .select("nom, image, etoiles")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch(err){
+    res.json(null);
+  }
+});
+
     const dataJ = await resJ.json();
 
     if (!dataJ || dataJ.length === 0) {
