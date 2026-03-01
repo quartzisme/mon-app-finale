@@ -819,7 +819,4 @@ app.get("/api/stats", async (req,res)=>{
 
 // ===================== SERVEUR =====================
 const PORT = process.env.PORT || 3000;
-
-// ===================== SERVEUR =====================
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, ()=>console.log(`Serveur démarré sur http://localhost:${PORT}`));
