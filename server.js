@@ -111,25 +111,6 @@ function renderPage(title, content){
             }
         </style>
     </head>
-    <script>
-    async function verifierScore() {
-    const jeu = document.querySelector('[name="jeu_id"]').value;
-    const joueur = document.querySelector('[name="joueur_id"]').value;
-    const champ = document.getElementById("score");
-
-    if (!jeu || !joueur) return;
-
-   
-    const data = await res.json();
-
-    if (data && data.score !== undefined) {
-        champ.value = data.score;
-    }
-    }
-
-    document.querySelector('[name="jeu_id"]').addEventListener("change", verifierScore);
-    document.querySelector('[name="joueur_id"]').addEventListener("change", verifierScore);
-    </script>
 
     <body>
     <div class="page-container">
@@ -172,7 +153,7 @@ app.get("/menu", (req,res)=>{
         <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
         <li><a href="/filtrages">🔍 Filtrages</a></li>
         <li><a href="/competitions/liste">🏆 Compétitions</a></li>
-        <li><a href="/logout">Déconnexion</a></li>
+        <li><a href="/logout">⏻ Déconnexion</a></li>
     </div>
     </ul>`;
     res.send(renderPage("Menu", html));
@@ -273,7 +254,7 @@ app.get("/joueurs/liste", async (req,res)=>{
         if(error) throw error;
 
 let rows = joueurs.map(j => `
-  
+  <div class="result-box" style="margin-bottom:15px;">
     <table style="width:100%;">
       <tr>
         <td style="width:120px; text-align:center;">
@@ -297,18 +278,17 @@ let rows = joueurs.map(j => `
         </td>
       </tr>
     </table>
- 
+  </div>
 `).join("");
 
+// ===== PAGE JOUEURS =====
         const html = `
         <h2>👥 Gestion des joueurs</h2>
-        <button><a href="/joueurs/ajouter">Ajouter un joueur</a></button>
+        <button onclick="location.href='/joueurs/ajouter'">
+        Ajouter un joueur
+        </button>
 
-        <div class="result-box">
-            <table>
-            ${rows}
-            </table>
-        </div>
+        ${rows}
 
         <a href="/menu">⬅ Retour</a>
         `;
@@ -632,158 +612,94 @@ app.get("/api/scores-par-joueur", async (req, res) => {
 });
 
 // ===================== MEILLEURS / PIRES JEUX =====================
+// ===================== PAGE STATS =====================
 app.get("/stats", async (req,res)=>{
-    try {
-        const { data: joueurs, error } = await supabase
-            .from("joueurs")
-            .select("*")
-            .order("nom");
+  try {
+    const { data: joueurs, error } = await supabase
+      .from("joueurs")
+      .select("*")
+      .order("nom");
 
-        if(error) throw error;
+    if (error) throw error;
 
-        let options = joueurs.map(j =>
-            `<option value="${j.id}">${j.nom}</option>`
-        ).join("");
+    let options = joueurs.map(j =>
+      `<option value="${j.id}">${j.nom}</option>`
+    ).join("");
 
-        const html = `
-            <h2>🥇 Top jeux 💀</h2>
+    const html = `
+<h2>🥇 Top jeux 💀</h2>
 
-        <form id="formStats">
-            Choisir joueur:<br>
-            <select name="joueur" id="choixJoueur">
-                <option value="">-- Choisir --</option>
-                <option value="all">Tous les joueurs</option>
-                ${options}
-            </select>
-        </form>
-        <div id="resultatsStats"></div>
+<form id="formStats">
+  Choisir joueur:<br>
+  <select name="joueur" id="choixJoueur">
+    <option value="">-- Choisir --</option>
+    <option value="all">Tous les joueurs</option>
+    ${options}
+  </select>
+</form>
 
-        <script>
-        
+<div id="resultatsStats"></div>
+
+<a href="/menu">⬅ Retour</a>
+
+<script>
+// ===== SCRIPT STATS PROPRE =====
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("choixJoueur").addEventListener("change", async function () {
-  });
-});
-  const joueur = this.value;
+
+  const select = document.getElementById("choixJoueur");
   const div = document.getElementById("resultatsStats");
 
-  if (!joueur) {
-    div.innerHTML = "";
-    return;
-  }
+  select.addEventListener("change", async function () {
 
-  try {
-    const res = await fetch("/api/stats?joueur=" + joueur);
-    const data = await res.json();
+    const joueur = this.value;
 
-    if (!data || !data.meilleurs) {
-      div.innerHTML = "<div class='result-box'>Aucune donnée</div>";
+    if (!joueur) {
+      div.innerHTML = "";
       return;
     }
 
-    let html = "";
+    try {
+      const res = await fetch("/api/stats?joueur=" + joueur);
+      const data = await res.json();
 
-    html += "<div class='result-box'><h3>🏆 Meilleurs jeux</h3>";
-    data.meilleurs.forEach(j => {
-      html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
-    });
-    html += "</div>";
+      if (!data || !data.meilleurs) {
+        div.innerHTML = "<div class='result-box'>Aucune donnée</div>";
+        return;
+      }
 
-    html += "<div class='result-box'><h3>💀 Pires jeux</h3>";
-    data.pires.forEach(j => {
-      html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
-    });
-    html += "</div>";
+      let html = "";
 
-    div.innerHTML = html;
+      // ===== MEILLEURS =====
+      html += "<div class='result-box'><h3>🏆 Meilleurs jeux</h3>";
+      data.meilleurs.forEach(j => {
+        html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
+      });
+      html += "</div>";
 
-  } catch (e) {
-    div.innerHTML = "<div class='result-box'>Erreur</div>";
-  }
+      // ===== PIRES =====
+      html += "<div class='result-box'><h3>💀 Pires jeux</h3>";
+      data.pires.forEach(j => {
+        html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
+      });
+      html += "</div>";
+
+      div.innerHTML = html;
+
+    } catch (e) {
+      div.innerHTML = "<div class='result-box'>Erreur</div>";
+    }
+
+  });
+
 });
 </script>
+`;
 
-<div id="resultatsStats"></div>
-            <a href="/menu">⬅ Retour</a>
-        `;
+    res.send(renderPage("Statistiques", html));
 
-        res.send(renderPage("Statistiques", html));
-
-    } catch(err){
-        res.send(renderPage("Erreur", err.message));
-    }
-});
-
-app.get("/stats/resultat", async (req,res)=>{
-    try {
-
-        const joueur = req.query.joueur;
-
-        let query = supabase
-            .from("scores")
-            .select(`
-                score,
-                jeux ( id, nom ),
-                joueurs ( id, nom )
-            `);
-
-        if(joueur !== "all"){
-            query = query.eq("joueur_id", joueur);
-        }
-
-        const { data: scores, error } = await query;
-
-        if(error) throw error;
-
-        if(!scores.length){
-            return res.send(renderPage("Stats", "<h3>Aucune donnée disponible</h3><a href='/stats'>⬅ Retour</a>"));
-        }
-
-        // Calcul moyenne par jeu
-        let stats = {};
-
-        scores.forEach(s=>{
-            const nomJeu = s.jeux.nom;
-            if(!stats[nomJeu]){
-                stats[nomJeu] = { total: 0, count: 0 };
-            }
-            stats[nomJeu].total += s.score;
-            stats[nomJeu].count += 1;
-        });
-
-        let resultats = Object.keys(stats).map(jeu=>{
-            return {
-                jeu,
-                moyenne: stats[jeu].total / stats[jeu].count
-            };
-        });
-
-        resultats.sort((a,b)=> b.moyenne - a.moyenne);
-
-        const meilleurs = resultats.slice(0,5);
-        const pires = resultats.slice(-5).reverse();
-
-        let html = "<h2>Résultats</h2>";
-
-        html += "<h3>🏆 Meilleurs jeux</h3><ul>";
-        meilleurs.forEach(j=>{
-            html += `<li>${j.jeu} (${j.moyenne.toFixed(2)})</li>`;
-        });
-        html += "</ul>";
-
-        html += "<h3>💀 Pires jeux</h3><ul>";
-        pires.forEach(j=>{
-            html += `<li>${j.jeu} (${j.moyenne.toFixed(2)})</li>`;
-        });
-        html += "</ul>";
-
-        html += "<a href='/stats'>⬅ Retour</a>";
-
-        res.send(renderPage("Résultats", html));
-
-    } catch(err){
-        res.send(renderPage("Erreur", err.message));
-    }
+  } catch(err){
+    res.send(renderPage("Erreur", err.message));
+  }
 });
 
 
