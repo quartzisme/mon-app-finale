@@ -145,7 +145,9 @@ app.get("/menu", (req,res)=>{
     if(!req.session.auth) return res.redirect("/");
     const html = `
     <h1>🎲 Jeux de Société</h1>
-    <ul>
+    <div class="result-box">
+    <ul style="list-style:none; padding-left:0;">
+    
     <div style="display:flex; flex-direction:column; gap:12px; max-width:320px;">
         <li><a href="/jeux/liste">⚔️ Jeux</a></li>
         <li><a href="/joueurs/liste">👥 Joueurs</a></li>
@@ -155,7 +157,7 @@ app.get("/menu", (req,res)=>{
         <li><a href="/competitions/liste">🏆 Compétitions</a></li>
         <li><a href="/logout">⏻ Déconnexion</a></li>
     </div>
-    </ul>`;
+    </ul></div>`;
     res.send(renderPage("Menu", html));
 });
 
@@ -244,6 +246,7 @@ app.get("/jeux/liste", async (req, res) => {
 
 
 // ===================== ROUTES JOUEURS =====================
+// ===================== ROUTES JOUEURS =====================
 app.get("/joueurs/liste", async (req,res)=>{
     try {
         const { data: joueurs, error } = await supabase
@@ -253,45 +256,87 @@ app.get("/joueurs/liste", async (req,res)=>{
 
         if(error) throw error;
 
-let rows = joueurs.map(j => `
-  <div class="result-box" style="margin-bottom:15px;">
-    <table style="width:100%;">
-      <tr>
-        <td style="width:120px; text-align:center;">
-          ${j.image ? `<img src="/images/${j.image}" width="80"><br>` : ""}
-          <strong>${j.nom}</strong>
-        </td>
+        // ===== calcul total des jeux UNE SEULE FOIS =====
+        const { count: totalJeux } = await supabase
+            .from("jeux")
+            .select("*", { count: "exact", head: true });
 
-        <td style="text-align:center; width:120px;">
-          ⭐ ${j.etoiles || 0}
-        </td>
+        // ===== construction des cartes joueurs =====
+        let rows = await Promise.all(joueurs.map(async (j) => {
 
-        <td>
-          <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
-          &nbsp;|&nbsp;
-          <a href="/joueurs/supprimer/${j.id}"
-             onclick="return confirm('Supprimer ce joueur ?');">
-             🗑 Supprimer
-          </a>
-          <br>
-          <small id="best-${j.id}">Chargement meilleur jeu...</small>
-        </td>
-      </tr>
-    </table>
-  </div>
-`).join("");
+            // ===== nombre de scores du joueur =====
+            const { count: totalScores } = await supabase
+                .from("scores")
+                .select("*", { count: "exact", head: true })
+                .eq("joueur_id", j.id);
 
-// ===== PAGE JOUEURS =====
+            const pourcentage = totalJeux
+                ? Math.round((totalScores / totalJeux) * 100)
+                : 0;
+
+            // ===== meilleur(s) jeu(x) du joueur =====
+            const { data: bestScores } = await supabase
+                .from("scores")
+                .select(`
+                    score,
+                    jeux ( nom )
+                `)
+                .eq("joueur_id", j.id)
+                .order("score", { ascending: false });
+
+            let bestJeuHTML = "Aucun score";
+
+            if (bestScores && bestScores.length > 0) {
+                const maxScore = bestScores[0].score;
+
+                const meilleurs = bestScores
+                    .filter(s => s.score === maxScore)
+                    .map(s => s.jeux?.nom || "Jeu inconnu");
+
+                bestJeuHTML = meilleurs.join(", ");
+            }
+
+            // ===== HTML DU JOUEUR =====
+            return `
+            <div class="result-box" style="margin-bottom:15px;">
+              <table style="width:100%;">
+                <tr>
+                  <td style="width:120px; text-align:center;">
+                    ${j.image ? `<img src="/images/${j.image}" width="80"><br>` : ""}
+                    <strong>${j.nom}</strong>
+                  </td>
+
+                  <td style="text-align:center; width:120px;">
+                    ⭐ ${j.etoiles || 0}
+                  </td>
+
+                  <td>
+                    <div><b>Meilleur jeu :</b> ${bestJeuHTML}</div>
+                    <div><b>Jeux évalués :</b> ${pourcentage}%</div>
+
+                    <br>
+
+                    <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
+                    &nbsp;|&nbsp;
+                    <a href="/joueurs/supprimer/${j.id}"
+                       onclick="return confirm('Supprimer ce joueur ?');">
+                       🗑 Supprimer
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </div>
+            `;
+        }));
+
         const html = `
         <h2>👥 Gestion des joueurs</h2>
-        <button onclick="location.href='/joueurs/ajouter'">
-        Ajouter un joueur
-        </button>
-
-        ${rows}
-
+        <button><a href="/joueurs/ajouter">Ajouter un joueur</a></button>
+        <br><br>
+        ${rows.join("")}
         <a href="/menu">⬅ Retour</a>
         `;
+
         res.send(renderPage("Joueurs", html));
 
     } catch(err){
@@ -315,6 +360,7 @@ app.get("/joueurs/ajouter", (req,res)=>{
     `;
     res.send(renderPage("Ajouter joueur", html));
 });
+
 app.post("/joueurs/ajouter", upload.single("image"), async (req,res)=>{
     try {
         const nom = req.body.nom;
@@ -714,6 +760,55 @@ app.get("/competitions/liste", async (req,res)=>{
     } catch(err){ res.send(renderPage("Erreur", err.message)); }
 });
 
+// ===================== API FILTRAGE JEUX =====================
+app.get("/api/filtrer-jeux", async (req, res) => {
+  try {
+    let query = supabase
+      .from("jeux")
+      .select("*");
+
+    const { min_joueurs, max_joueurs, temps_max, score_min } = req.query;
+
+    if (min_joueurs)
+      query = query.gte("min_joueurs", Number(min_joueurs));
+
+    if (max_joueurs)
+      query = query.lte("max_joueurs", Number(max_joueurs));
+
+    if (temps_max)
+      query = query.lte("temps", Number(temps_max));
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    let jeux = data;
+
+    // filtre sur score moyen
+    if (score_min) {
+      const { data: scores } = await supabase
+        .from("scores")
+        .select("jeu_id, score");
+
+      let moyennes = {};
+      scores.forEach(s => {
+        if (!moyennes[s.jeu_id]) moyennes[s.jeu_id] = { total:0, count:0 };
+        moyennes[s.jeu_id].total += s.score;
+        moyennes[s.jeu_id].count++;
+      });
+
+      jeux = jeux.filter(j => {
+        const m = moyennes[j.id];
+        if (!m) return false;
+        return (m.total / m.count) >= Number(score_min);
+      });
+    }
+
+    res.json(jeux);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // =========== ROUTE STATS ===============
 app.get("/api/stats", async (req,res)=>{
@@ -763,6 +858,67 @@ app.get("/api/stats", async (req,res)=>{
   } catch(err){
     res.status(500).json({ error: err.message });
   }
+});
+
+// ===================== PAGE FILTRAGE =====================
+app.get("/filtrage", (req, res) => {
+
+const html = `
+<h2>🔎 Filtrer les jeux</h2>
+
+<div class="result-box">
+
+Minimum joueurs:<br>
+<input type="number" id="minj"><br><br>
+
+Maximum joueurs:<br>
+<input type="number" id="maxj"><br><br>
+
+Temps maximum (minutes):<br>
+<input type="number" id="temps"><br><br>
+
+Score moyen minimum:<br>
+<input type="number" step="0.1" id="score"><br><br>
+
+<button onclick="filtrer()">🔍 Rechercher</button>
+
+</div>
+
+<div id="resultatsFiltre"></div>
+
+<a href="/menu">⬅ Retour</a>
+
+<script>
+async function filtrer() {
+
+  const url =
+    "/api/filtrer-jeux?" +
+    "min_joueurs=" + document.getElementById("minj").value +
+    "&max_joueurs=" + document.getElementById("maxj").value +
+    "&temps_max=" + document.getElementById("temps").value +
+    "&score_min=" + document.getElementById("score").value;
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  const div = document.getElementById("resultatsFiltre");
+
+  if (!data.length) {
+    div.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
+    return;
+  }
+
+  let html = "";
+  data.forEach(j => {
+    html += "<div class='result-box'><b>" + j.nom + "</b></div>";
+  });
+
+  div.innerHTML = html;
+}
+</script>
+`;
+
+res.send(renderPage("Filtrage", html));
 });
 
 // ===================== SERVEUR =====================
