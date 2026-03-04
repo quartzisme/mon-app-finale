@@ -246,7 +246,6 @@ app.get("/jeux/liste", async (req, res) => {
 
 
 // ===================== ROUTES JOUEURS =====================
-// ===================== ROUTES JOUEURS =====================
 app.get("/joueurs/liste", async (req,res)=>{
     try {
         const { data: joueurs, error } = await supabase
@@ -635,6 +634,60 @@ app.get("/api/scores-par-jeu", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ===================== API FILTRER JEUX =====================
+app.get("/api/filtrer-jeux", async (req,res)=>{
+  try {
+
+    const { minj, maxj, tempsmax, scoremin } = req.query;
+
+    // ===== récupérer jeux + scores =====
+    const { data: jeux, error } = await supabase
+      .from("jeux")
+      .select(`
+        id,
+        nom,
+        min_joueurs,
+        max_joueurs,
+        temps_max,
+        scores ( score )
+      `);
+
+    if (error) throw error;
+
+    // ===== calcul moyenne + filtrage =====
+    let resultat = jeux.map(j => {
+
+      let moyenne = null;
+
+      if (j.scores && j.scores.length > 0){
+        moyenne =
+          j.scores.reduce((a,b)=> a + Number(b.score), 0)
+          / j.scores.length;
+      }
+
+      return {
+        ...j,
+        moyenne: moyenne ? moyenne.toFixed(2) : null
+      };
+
+    }).filter(j => {
+
+      if (minj && j.min_joueurs < Number(minj)) return false;
+      if (maxj && j.max_joueurs > Number(maxj)) return false;
+      if (tempsmax && j.temps_max > Number(tempsmax)) return false;
+      if (scoremin && (!j.moyenne || Number(j.moyenne) < Number(scoremin))) return false;
+
+      return true;
+    });
+
+    res.json(resultat);
+
+  } catch(err){
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ================= SCORES PAR JOUEUR =================
 app.get("/api/scores-par-joueur", async (req, res) => {
   try {
@@ -748,6 +801,62 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
+// ===================== FILTRAGES =====================
+app.get("/filtrages", (req,res)=>{
+
+const html = `
+<h2>🔍 Filtrer les jeux</h2>
+
+<form id="formFiltre">
+
+<label>👥 Joueurs minimum :</label>
+<input type="number" name="minj"><br>
+
+<label>👥 Joueurs maximum :</label>
+<input type="number" name="maxj"><br>
+
+<label>⏱ Temps maximum (minutes) :</label>
+<input type="number" name="tempsmax"><br>
+
+<label>⭐ Score moyen minimum :</label>
+<input type="number" step="0.1" name="scoremin"><br>
+
+<button type="submit">Rechercher</button>
+</form>
+
+<div id="resultatsFiltre"></div>
+
+<a href="/menu">⬅ Retour</a>
+
+<script>
+document.getElementById("formFiltre").addEventListener("submit", async function(e){
+  e.preventDefault();
+
+  const params = new URLSearchParams(new FormData(this));
+
+  const res = await fetch("/api/filtrer-jeux?" + params.toString());
+  const data = await res.json();
+
+  const div = document.getElementById("resultatsFiltre");
+
+  if (!data || data.length === 0){
+    div.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
+    return;
+  }
+
+  div.innerHTML =
+    "<div class='result-box'><b>Résultats :</b><br>" +
+    data.map(j =>
+      j.nom +
+      " — Moyenne: " + (j.moyenne ?? "—")
+    ).join("<br>") +
+    "</div>";
+});
+</script>
+`;
+
+res.send(renderPage("Filtrages", html));
+});
 
 // ===================== ROUTES COMPÉTITIONS =====================
 app.get("/competitions/liste", async (req,res)=>{
