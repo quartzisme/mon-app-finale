@@ -109,6 +109,16 @@ function renderPage(title, content){
                 border-radius: 6px;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.08);
             }
+            button {
+            box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+            cursor: pointer;
+            transition: 0.15s;
+            }
+
+            button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 10px rgba(0,0,0,0.35);
+            }                
         </style>
     </head>
 
@@ -198,6 +208,29 @@ app.get("/jeux/liste", async (req, res) => {
     let html = `
 
     <h2>⚔️ Liste des jeux</h2>
+
+    <div class="box-info">
+    <h3>➕ Ajouter un jeu</h3>
+
+    <form method="POST" action="/jeux/ajouter">
+
+    Nom:<br>
+    <input name="nom" required><br>
+
+    Joueurs min:<br>
+    <input type="number" name="min_joueurs" style="width:90px;"><br>
+
+    Joueurs max:<br>
+    <input type="number" name="max_joueurs" style="width:90px;"><br>
+
+    Temps max:<br>
+    <input type="number" name="temps_max" style="width:110px;"><br>
+
+    <button>Ajouter le jeu</button>
+    </form>
+    </div>
+    <br>
+
     <a href="/menu">⬅ Retour</a><br><br>
 
     <table class="jeux-table">
@@ -735,6 +768,9 @@ app.get("/stats", async (req,res)=>{
     <option value="all">Tous les joueurs</option>
     ${options}
   </select>
+  <br>
+Nombre de jeux à afficher:<br>
+<input type="number" id="nbTop" value="5" min="1" max="50" style="width:90px;">
 </form>
 
 <div id="resultatsStats"></div>
@@ -758,7 +794,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const res = await fetch("/api/stats?joueur=" + joueur);
+    const nb = document.getElementById("nbTop").value || 5;
+    const res = await fetch("/api/stats?joueur=" + joueur + "&nb=" + nb);
       const data = await res.json();
 
       if (!data || !data.meilleurs) {
@@ -808,6 +845,11 @@ const html = `
 <h2>🔍 Filtrer les jeux</h2>
 
 <form id="formFiltre">
+
+<input type="number" name="minj" style="width:90px;"><br>
+<input type="number" name="maxj" style="width:90px;"><br>
+<input type="number" name="tempsmax" style="width:110px;"><br>
+<input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
 
 <label>👥 Joueurs minimum :</label>
 <input type="number" name="minj"><br>
@@ -923,6 +965,7 @@ app.get("/api/filtrer-jeux", async (req, res) => {
 app.get("/api/stats", async (req,res)=>{
   try {
     const joueur = req.query.joueur;
+    const nb = Number(req.query.nb) || 5;
 
     let query = supabase
     .from("scores")
@@ -960,8 +1003,8 @@ app.get("/api/stats", async (req,res)=>{
     resultats.sort((a,b)=> b.moyenne - a.moyenne);
 
     res.json({
-      meilleurs: resultats.slice(0,5),
-      pires: resultats.slice(-5).reverse()
+    meilleurs: resultats.slice(0, nb),
+    pires: resultats.slice(-nb).reverse()
     });
 
   } catch(err){
@@ -976,6 +1019,11 @@ const html = `
 <h2>🔎 Filtrer les jeux</h2>
 
 <div class="result-box">
+
+<input type="number" name="minj" style="width:90px;"><br>
+<input type="number" name="maxj" style="width:90px;"><br>
+<input type="number" name="tempsmax" style="width:110px;"><br>
+<input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
 
 Minimum joueurs:<br>
 <input type="number" id="minj"><br><br>
