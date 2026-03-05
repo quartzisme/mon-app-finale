@@ -231,7 +231,38 @@ app.get("/jeux/liste", async (req, res) => {
     </div>
     <br>
 
+    <div class="box-info">
+    <h3>✏️ Modifier / 🗑 Supprimer un jeu</h3>
+
+    <form method="GET" action="/jeux/modifier">
+    Choisir le jeu:<br>
+    <select name="id" required>
+    <option value="">-- Choisir --</option>
+    ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
+    </select><br>
+
+    <button>✏ Modifier</button>
+    </form>
+
+    <br>
+
+    <form method="POST" action="/jeux/supprimer"
+        onsubmit="return confirm('Supprimer ce jeu ?');">
+
+    <select name="id" required>
+    <option value="">-- Choisir --</option>
+    ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
+    </select><br>
+
+    <button>🗑 Supprimer</button>
+    </form>
+    </div>
+
+    <br>
+
     <a href="/menu">⬅ Retour</a><br><br>
+
+
 
     <table class="jeux-table">
       <tr>
@@ -482,6 +513,56 @@ app.get("/joueurs/supprimer/:id", async (req,res)=>{
     }
 });
 
+// ===================== AJOUTER JEU =====================
+app.post("/jeux/ajouter", async (req,res)=>{
+  try {
+
+    const {
+      nom,
+      min_joueurs,
+      max_joueurs,
+      temps_min,
+      temps_max
+    } = req.body;
+
+    const { error } = await supabase
+      .from("jeux")
+      .insert([{
+        nom,
+        min_joueurs,
+        max_joueurs,
+        temps_min,
+        temps_max
+      }]);
+
+    if (error) throw error;
+
+    res.redirect("/jeux/liste");
+
+  } catch(err){
+    res.send(renderPage("Erreur", err.message));
+  }
+});
+
+// ===================== SUPPRIMER JEU =====================
+app.post("/jeux/supprimer", async (req,res)=>{
+  try {
+
+    const { id } = req.body;
+
+    const { error } = await supabase
+      .from("jeux")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    res.redirect("/jeux/liste");
+
+  } catch(err){
+    res.send(renderPage("Erreur", err.message));
+  }
+});
 
 // ===================== ROUTES SCORES =====================
 app.get("/scores/ajouter", async (req,res)=>{
@@ -769,6 +850,8 @@ app.get("/stats", async (req,res)=>{
     ${options}
   </select>
   <br>
+<button type="button" onclick="chargerStats()">🔄 Rafraîchir</button>
+  <br>
 Nombre de jeux à afficher:<br>
 <input type="number" id="nbTop" value="5" min="1" max="50" style="width:90px;">
 </form>
@@ -778,7 +861,7 @@ Nombre de jeux à afficher:<br>
 <a href="/menu">⬅ Retour</a>
 
 <script>
-// ===== SCRIPT STATS PROPRE =====
+// ===== SCRIPT STATS =====
 document.addEventListener("DOMContentLoaded", () => {
 
   const select = document.getElementById("choixJoueur");
@@ -828,6 +911,56 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
 });
+async function chargerStats() {
+
+  const joueur = document.getElementById("choixJoueur").value;
+  const nb = document.getElementById("nbTop")?.value || 5;
+  const div = document.getElementById("resultatsStats");
+
+  if (!joueur) {
+    div.innerHTML = "";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/stats?joueur=" + joueur + "&nb=" + nb);
+    const data = await res.json();
+
+    if (!data || !data.meilleurs) {
+      div.innerHTML = "<div class='result-box'>Aucune donnée</div>";
+      return;
+    }
+
+    let html = "";
+
+    html += "<div class='result-box'><h3>🏆 Meilleurs jeux</h3>";
+    data.meilleurs.forEach(j => {
+      html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
+    });
+    html += "</div>";
+
+    html += "<div class='result-box'><h3>💀 Pires jeux</h3>";
+    data.pires.forEach(j => {
+      html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
+    });
+    html += "</div>";
+
+    div.innerHTML = html;
+
+  } catch (e) {
+    div.innerHTML = "<div class='result-box'>Erreur</div>";
+  }
+}
+function rafraichirStats(){
+
+  const select = document.getElementById("choixJoueur");
+
+  if(!select.value) return;
+
+  select.dispatchEvent(new Event("change"));
+
+}
+
 </script>
 `;
 
@@ -846,22 +979,17 @@ const html = `
 
 <form id="formFiltre">
 
-<input type="number" name="minj" style="width:90px;"><br>
-<input type="number" name="maxj" style="width:90px;"><br>
-<input type="number" name="tempsmax" style="width:110px;"><br>
-<input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
-
 <label>👥 Joueurs minimum :</label>
-<input type="number" name="minj"><br>
+<input type="number" name="minj" style="width:90px;"><br>
 
 <label>👥 Joueurs maximum :</label>
-<input type="number" name="maxj"><br>
+<input type="number" name="maxj" style="width:90px;"><br>
 
 <label>⏱ Temps maximum (minutes) :</label>
-<input type="number" name="tempsmax"><br>
+<input type="number" name="tempsmax" style="width:110px;"><br>
 
 <label>⭐ Score moyen minimum :</label>
-<input type="number" step="0.1" name="scoremin"><br>
+<input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
 
 <button type="submit">Rechercher</button>
 </form>
