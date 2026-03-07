@@ -346,7 +346,7 @@ let rows = await Promise.all(joueurs.map(async (j) => {
     const pourcentage = totalJeux
         ? Math.round((totalScores / totalJeux) * 100)
         : 0;
-        
+
             // ===== meilleur(s) jeu(x) du joueur =====
             const { data: bestScores } = await supabase
                 .from("scores")
@@ -381,17 +381,14 @@ let rows = await Promise.all(joueurs.map(async (j) => {
 
                   <td style="text-align:center; width:120px;">
                 ⭐ ${j.etoiles || 0}<br>
-                🧩 Jeux évalués : ${j.scores ? j.scores.length : 0} (${totalJeux ? Math.round((j.scores.length/totalJeux)*100) : 0}%)
+
                   </td>
 
                   <td>
-                    <div><b>Meilleur jeu :</b> ${bestJeuHTML}</div>
-                    <div><b>Jeux évalués :</b> ${pourcentage}%</div>
-
+                    🧩 Jeux évalués : ${j.scores ? j.scores.length : 0} (${totalJeux ? Math.round((j.scores.length/totalJeux)*100) : 0}%)
+                    <div><b>Meilleur jeu-score :</b> ${bestJeuHTML}</div>
                     <br>
 
-                    <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
-                    &nbsp;|&nbsp;
                     <a href="/joueurs/supprimer/${j.id}"
                        onclick="return confirm('Supprimer ce joueur ?');">
                        🗑 Supprimer
@@ -405,7 +402,9 @@ let rows = await Promise.all(joueurs.map(async (j) => {
 
         const html = `
         <h2>👥 Gestion des joueurs</h2>
-        <button><a href="/joueurs/ajouter">Ajouter un joueur</a></button>
+        <button><a href="/joueurs/ajouter">Ajouter un joueur</a></button><br>
+        <button><a href="/joueurs/modifier">Modifier un joueur</a></button><br>
+        <button><a href="/joueurs/supprimer">Supprimer un joueur</a></button>                
         <br><br>
         ${rows.join("")}
         <a href="/menu">⬅ Retour</a>
