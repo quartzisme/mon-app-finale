@@ -140,8 +140,25 @@ app.get("/", (req,res)=>{
     <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
     <form method="POST" action="/login">
         <input name="username" placeholder="Usager" required><br>
-        <input name="password" type="password" placeholder="Mot de passe" required><br>
-        <button>Entrer</button>
+        <div style="position:relative; display:inline-block;">
+        <input type="password" id="password" name="password" placeholder="Mot de passe" required>
+
+        <span onclick="togglePassword()"{
+
+  const p = document.getElementById("password");
+
+  if(p.type === "password"){
+    p.type = "text";
+  }else{
+    p.type = "password";
+  }
+
+}
+
+        </span>
+        </div>
+
+         <button>Entrer</button>
     </form>`;
     res.send(renderPage("Bienvenue", html));
 });
@@ -385,10 +402,12 @@ let rows = await Promise.all(joueurs.map(async (j) => {
                   </td>
 
                   <td>
-                    🧩 Jeux évalués : ${j.scores ? j.scores.length : 0} (${totalJeux ? Math.round((j.scores.length/totalJeux)*100) : 0}%)
-                    <div><b>Meilleur jeu-score :</b> ${bestJeuHTML}</div>
+                    <b>🧩 Jeux évalués :</b> ${j.scores ? j.scores.length : 0} (${totalJeux ? Math.round((j.scores.length/totalJeux)*100) : 0}%)
+                    <div><b>🔝 Meilleur jeu-score :</b> ${bestJeuHTML}</div>
                     <br>
 
+                    <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
+                    &nbsp;|&nbsp;
                     <a href="/joueurs/supprimer/${j.id}"
                        onclick="return confirm('Supprimer ce joueur ?');">
                        🗑 Supprimer
@@ -403,8 +422,6 @@ let rows = await Promise.all(joueurs.map(async (j) => {
         const html = `
         <h2>👥 Gestion des joueurs</h2>
         <button><a href="/joueurs/ajouter">Ajouter un joueur</a></button><br>
-        <button><a href="/joueurs/modifier">Modifier un joueur</a></button><br>
-        <button><a href="/joueurs/supprimer">Supprimer un joueur</a></button>                
         <br><br>
         ${rows.join("")}
         <a href="/menu">⬅ Retour</a>
@@ -1022,16 +1039,20 @@ document.getElementById("formFiltre").addEventListener("submit", async function(
 
   const div = document.getElementById("resultatsFiltre");
 
+// TRI par MOYENNE
+data.sort((a,b)=> (b.moyenne ?? 0) - (a.moyenne ?? 0));
+
   if (!data || data.length === 0){
     div.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
     return;
   }
 
   div.innerHTML =
-    "<div class='result-box'><b>Résultats :</b><br>" +
+    "<div class='result-box'><b>Résultats (Moyenne-Score):</b><br>" +
     data.map(j =>
       j.nom +
-      " — Moyenne: " + (j.moyenne ?? "—")
+      " — " + (j.moyenne ?? "—") + 
+      (j.joueurs ? " (" + j.joueurs.join(", ") + ")" : "")
     ).join("<br>") +
     "</div>";
 });
