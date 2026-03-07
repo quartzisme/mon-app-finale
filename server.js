@@ -330,32 +330,23 @@ app.get("/joueurs/liste", async (req,res)=>{
         if(error) throw error;
 
         // ===== calcul total des jeux UNE SEULE FOIS =====
-        const { count: totalJeux } = await supabase
-            .from("jeux")
-            .select("*", { count: "exact", head: true });
+const { count: totalJeux } = await supabase
+  .from("jeux")
+  .select("*", { count: "exact", head: true });
 
-        // ===== construction des cartes joueurs =====
-        // ===== CALCUL STATS JOUEURS =====
-        let totalJeux = 0;
+// ===== construction des cartes joueurs =====
+let rows = await Promise.all(joueurs.map(async (j) => {
 
-        const { data: jeux } = await supabase
-        .from("jeux")
-        .select("id");
+    // ===== nombre de scores du joueur =====
+    const { count: totalScores } = await supabase
+        .from("scores")
+        .select("*", { count: "exact", head: true })
+        .eq("joueur_id", j.id);
 
-        totalJeux = jeux.length;
-
-        let rows = await Promise.all(joueurs.map(async (j) => {
-
-            // ===== nombre de scores du joueur =====
-            const { count: totalScores } = await supabase
-                .from("scores")
-                .select("*", { count: "exact", head: true })
-                .eq("joueur_id", j.id);
-
-            const pourcentage = totalJeux
-                ? Math.round((totalScores / totalJeux) * 100)
-                : 0;
-
+    const pourcentage = totalJeux
+        ? Math.round((totalScores / totalJeux) * 100)
+        : 0;
+        
             // ===== meilleur(s) jeu(x) du joueur =====
             const { data: bestScores } = await supabase
                 .from("scores")
