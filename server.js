@@ -34,6 +34,7 @@ const upload = multer({ storage });
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use("/images", express.static(join(__dirname, "public/images")));
+app.use("/sounds", express.static(join(__dirname, "public")));
 
 function renderPage(title, content){
     return `
@@ -133,6 +134,9 @@ function renderPage(title, content){
 // ===================== LOGIN =====================
 app.get("/", (req,res)=>{
     const html = `
+    <audio autoplay>
+    <source src="/sounds/sound.mp3" type="audio/mpeg">
+    </audio>
     <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
     <form method="POST" action="/login">
         <input name="username" placeholder="Usager" required><br>
@@ -161,7 +165,7 @@ app.get("/menu", (req,res)=>{
     <div style="display:flex; flex-direction:column; gap:12px; max-width:320px;">
         <li><a href="/jeux/liste">⚔️ Jeux</a></li>
         <li><a href="/joueurs/liste">👥 Joueurs</a></li>
-        <li><a href="/scores/ajouter">📊 Scores</a></li>
+        <li><a href="/scores/ajouter">📊 Inscription des Scores</a></li>
         <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
         <li><a href="/filtrages">🔍 Filtrages</a></li>
         <li><a href="/competitions/liste">🏆 Compétitions</a></li>
@@ -222,6 +226,9 @@ app.get("/jeux/liste", async (req, res) => {
 
     Joueurs max:<br>
     <input type="number" name="max_joueurs" style="width:90px;"><br>
+
+    Temps min:<br>
+    <input type="number" name="temps_min" style="width:110px;"><br>
 
     Temps max:<br>
     <input type="number" name="temps_max" style="width:110px;"><br>
@@ -313,9 +320,12 @@ app.get("/jeux/liste", async (req, res) => {
 app.get("/joueurs/liste", async (req,res)=>{
     try {
         const { data: joueurs, error } = await supabase
-            .from("joueurs")
-            .select("*")
-            .order("nom");
+        .from("joueurs")
+        .select(`
+            *,
+            scores(score)
+        `)
+        .order("nom");
 
         if(error) throw error;
 
@@ -325,6 +335,15 @@ app.get("/joueurs/liste", async (req,res)=>{
             .select("*", { count: "exact", head: true });
 
         // ===== construction des cartes joueurs =====
+        // ===== CALCUL STATS JOUEURS =====
+        let totalJeux = 0;
+
+        const { data: jeux } = await supabase
+        .from("jeux")
+        .select("id");
+
+        totalJeux = jeux.length;
+
         let rows = await Promise.all(joueurs.map(async (j) => {
 
             // ===== nombre de scores du joueur =====
@@ -370,7 +389,8 @@ app.get("/joueurs/liste", async (req,res)=>{
                   </td>
 
                   <td style="text-align:center; width:120px;">
-                    ⭐ ${j.etoiles || 0}
+                ⭐ ${j.etoiles || 0}<br>
+                🧩 Jeux évalués : ${j.scores ? j.scores.length : 0} (${totalJeux ? Math.round((j.scores.length/totalJeux)*100) : 0}%)
                   </td>
 
                   <td>
@@ -878,6 +898,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
     const nb = document.getElementById("nbTop").value || 5;
+    document.getElementById("nbTop").addEventListener("change", ()=>{
+    document.getElementById("choixJoueur").dispatchEvent(new Event("change"));
+    });    
     const res = await fetch("/api/stats?joueur=" + joueur + "&nb=" + nb);
       const data = await res.json();
 
