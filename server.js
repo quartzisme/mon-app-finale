@@ -134,7 +134,7 @@ function renderPage(title, content){
 // ===================== LOGIN =====================
 app.get("/", (req,res)=>{
     const html = `
-    <audio autoplay>
+    <audio autoplay loop>
     <source src="/sounds/sound.mp3" type="audio/mpeg">
     </audio>
     <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
@@ -157,7 +157,7 @@ app.get("/", (req,res)=>{
 
         </span>
         </div>
-
+        <br>
          <button>Entrer</button>
     </form>`;
     res.send(renderPage("Bienvenue", html));
@@ -403,7 +403,7 @@ let rows = await Promise.all(joueurs.map(async (j) => {
 
                   <td>
                     <b>🧩 Jeux évalués :</b> ${j.scores ? j.scores.length : 0} (${totalJeux ? Math.round((j.scores.length/totalJeux)*100) : 0}%)
-                    <div><b>🔝 Meilleur jeu-score :</b> ${bestJeuHTML}</div>
+                    <div><b>🔝 Meilleur(s) jeu-score :</b> ${bestJeuHTML}</div>
                     <br>
 
                     <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
@@ -780,9 +780,9 @@ app.get("/api/scores-par-jeu", async (req, res) => {
 app.get("/api/filtrer-jeux", async (req,res)=>{
   try {
 
-    const { minj, maxj, tempsmax, scoremin } = req.query;
+    const { minj, maxj, tempsmax, scoremin, status } = req.query;
 
-    // ===== récupérer jeux + scores =====
+    // ===== récupérer jeux + scores + joueurs =====
     const { data: jeux, error } = await supabase
       .from("jeux")
       .select(`
@@ -791,25 +791,37 @@ app.get("/api/filtrer-jeux", async (req,res)=>{
         min_joueurs,
         max_joueurs,
         temps_max,
-        scores ( score )
+        infos,
+        scores(
+          score,
+          joueurs(nom)
+        )
       `);
 
     if (error) throw error;
 
-    // ===== calcul moyenne + filtrage =====
+    // ===== calcul moyenne + joueurs =====
     let resultat = jeux.map(j => {
 
       let moyenne = null;
+      let joueurs = [];
 
       if (j.scores && j.scores.length > 0){
+
         moyenne =
           j.scores.reduce((a,b)=> a + Number(b.score), 0)
           / j.scores.length;
+
+        joueurs = j.scores.map(s =>
+          `${s.joueurs?.nom || "?"} ${s.score}`
+        );
+
       }
 
       return {
         ...j,
-        moyenne: moyenne ? moyenne.toFixed(2) : null
+        moyenne: moyenne ? Number(moyenne.toFixed(2)) : null,
+        joueurs
       };
 
     }).filter(j => {
@@ -817,9 +829,15 @@ app.get("/api/filtrer-jeux", async (req,res)=>{
       if (minj && j.min_joueurs < Number(minj)) return false;
       if (maxj && j.max_joueurs > Number(maxj)) return false;
       if (tempsmax && j.temps_max > Number(tempsmax)) return false;
-      if (scoremin && (!j.moyenne || Number(j.moyenne) < Number(scoremin))) return false;
+
+      if (scoremin && (!j.moyenne || j.moyenne < Number(scoremin)))
+        return false;
+
+      if (status === "infos" && (!j.infos || j.infos.trim()===""))
+        return false;
 
       return true;
+
     });
 
     res.json(resultat);
@@ -877,10 +895,11 @@ app.get("/stats", async (req,res)=>{
     ${options}
   </select>
   <br>
-<button type="button" onclick="chargerStats()">🔄 Rafraîchir</button>
-  <br>
+
 Nombre de jeux à afficher:<br>
 <input type="number" id="nbTop" value="5" min="1" max="50" style="width:90px;">
+  <br>
+<button type="button" onclick="chargerStats()">🔄 Rafraîchir</button>
 </form>
 
 <div id="resultatsStats"></div>
@@ -1009,17 +1028,25 @@ const html = `
 
 <form id="formFiltre">
 
-<label>👥 Joueurs minimum :</label>
+<label>👤 Joueurs minimum :</label>
 <input type="number" name="minj" style="width:90px;"><br>
 
 <label>👥 Joueurs maximum :</label>
 <input type="number" name="maxj" style="width:90px;"><br>
 
-<label>⏱ Temps maximum (minutes) :</label>
-<input type="number" name="tempsmax" style="width:110px;"><br>
+<label>⌛ Temps maximum :</label>
+<input type="number" name="tempsmax" style="width:110px;">
+<label> (minutes)</label><br>
 
 <label>⭐ Score moyen minimum :</label>
 <input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
+
+Status:<br>
+<select name="status">
+<option value=""> </option>
+<option value="infos">Infos</option>
+</select>
+<br>
 
 <button type="submit">Rechercher</button>
 </form>
@@ -1050,10 +1077,10 @@ data.sort((a,b)=> (b.moyenne ?? 0) - (a.moyenne ?? 0));
   div.innerHTML =
     "<div class='result-box'><b>Résultats (Moyenne-Score):</b><br>" +
     data.map(j =>
-      j.nom +
-      " — " + (j.moyenne ?? "—") + 
-      (j.joueurs ? " (" + j.joueurs.join(", ") + ")" : "")
-    ).join("<br>") +
+    j.nom +
+    " — " + (j.moyenne ?? "—") +
+    (j.joueurs?.length ? " (" + j.joueurs.join(", ") + ")" : "")
+    ) <br>
     "</div>";
 });
 </script>
@@ -1174,68 +1201,6 @@ app.get("/api/stats", async (req,res)=>{
   }
 });
 
-// ===================== PAGE FILTRAGE =====================
-app.get("/filtrage", (req, res) => {
-
-const html = `
-<h2>🔎 Filtrer les jeux</h2>
-
-<div class="result-box">
-
-<input type="number" name="minj" style="width:90px;"><br>
-<input type="number" name="maxj" style="width:90px;"><br>
-<input type="number" name="tempsmax" style="width:110px;"><br>
-<input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
-
-Minimum joueurs:<br>
-<input type="number" id="minj"><br><br>
-
-Maximum joueurs:<br>
-<input type="number" id="maxj"><br><br>
-
-Temps maximum (minutes):<br>
-<input type="number" id="temps"><br><br>
-
-Score moyen minimum:<br>
-<input type="number" step="0.1" id="score"><br><br>
-
-<button onclick="filtrer()">🔍 Rechercher</button>
-
-</div>
-
-<div id="resultatsFiltre"></div>
-
-<a href="/menu">⬅ Retour</a>
-
-<script>
-async function filtrer() {
-
-  const url =
-    "/api/filtrer-jeux?" +
-    "min_joueurs=" + document.getElementById("minj").value +
-    "&max_joueurs=" + document.getElementById("maxj").value +
-    "&temps_max=" + document.getElementById("temps").value +
-    "&score_min=" + document.getElementById("score").value;
-
-  const res = await fetch(url);
-  const data = await res.json();
-
-  const div = document.getElementById("resultatsFiltre");
-
-  if (!data.length) {
-    div.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
-    return;
-  }
-
-  let html = "";
-  data.forEach(j => {
-    html += "<div class='result-box'><b>" + j.nom + "</b></div>";
-  });
-
-  div.innerHTML = html;
-}
-</script>
-`;
 
 res.send(renderPage("Filtrage", html));
 });
