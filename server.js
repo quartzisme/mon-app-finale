@@ -143,15 +143,14 @@ app.get("/", (req,res)=>{
         <div style="position:relative; display:inline-block;">
         <input type="password" id="password" name="password" placeholder="Mot de passe" required>
 
-        <span onclick="togglePassword()"{
+        <button type="button" onclick="togglePassword()">👁</button>
 
-  const p = document.getElementById("password");
-
-  if(p.type === "password"){
-    p.type = "text";
-  }else{
-    p.type = "password";
-  }
+        <script>
+        function togglePassword(){
+        const p = document.getElementById("password");
+        p.type = p.type === "password" ? "text" : "password";
+        }
+        </script>
 
 }
 
@@ -965,28 +964,7 @@ Nombre de jeux à afficher:<br>
 <button type="button" onclick="chargerStats()">🔄 Rafraîchir</button>
 </form>
 
-const selectJoueur = document.getElementById("joueur");
-
-selectJoueur.addEventListener("change", async () => {
-
-  const id = selectJoueur.value;
-
-  if(id === "all"){
-    document.getElementById("carte-joueur").innerHTML = "";
-    return;
-  }
-
-  const res = await fetch("/api/joueur?id=" + id);
-  const joueur = await res.json();
-
-  document.getElementById("carte-joueur").innerHTML = `
-    <div class="carte-joueur">
-      <h2>${joueur.nom}</h2>
-      <p>Scores : ${joueur.scores}</p>
-      <p>Moyenne : ${joueur.moyenne}</p>
-    </div>
-  `;
-});
+<div id="carte-joueur"></div>
 
 <div id="resultatsStats"></div>
 
@@ -1160,14 +1138,14 @@ data.sort((a,b)=> (b.moyenne ?? 0) - (a.moyenne ?? 0));
     return;
   }
 
-  div.innerHTML =
-    "<div class='result-box'><b>Résultats (Moyenne-Score):</b><br>" +
-    data.map(j =>
+div.innerHTML =
+  "<div class='result-box'><b>Résultats (Moyenne-Score):</b><br>" +
+  data.map(j =>
     j.nom +
     " — " + (j.moyenne ?? "—") +
     (j.joueurs?.length ? " (" + j.joueurs.join(", ") + ")" : "")
-    ) <br>
-    "</div>";
+  ).join("<br>") +
+  "</div>";
 });
 </script>
 `;
