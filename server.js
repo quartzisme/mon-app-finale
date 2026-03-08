@@ -1202,9 +1202,6 @@ app.get("/api/stats", async (req,res)=>{
 });
 
 
-res.send(renderPage("Filtrage", html));
-
-
 // ===================== SERVEUR =====================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, ()=>console.log(`Serveur démarré sur http://localhost:${PORT}`));
