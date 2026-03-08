@@ -259,7 +259,7 @@ app.get("/jeux/liste", async (req, res) => {
     <h3>✏️ Modifier / 🗑 Supprimer un jeu</h3>
 
     <form method="GET" action="/jeux/modifier">
-    Choisir le jeu:<br>
+    Modifier ce jeu:<br>
     <select name="id" required>
     <option value="">-- Choisir --</option>
     ${jeux.map(j=>`<option value="${j.id}">${j.nom}</option>`).join("")}
@@ -272,6 +272,7 @@ app.get("/jeux/liste", async (req, res) => {
 
     <form method="POST" action="/jeux/supprimer"
         onsubmit="return confirm('Supprimer ce jeu ?');">
+            Supprimer ce jeu:<br>
 
     <select name="id" required>
     <option value="">-- Choisir --</option>
@@ -298,6 +299,37 @@ app.get("/jeux/liste", async (req, res) => {
         <th>Moyenne</th>
       </tr>
     `;
+
+// ================= MODIFIER JEU =================
+app.get("/jeux/modifier", async (req, res) => {
+
+  const id = req.query.id;
+
+  const { data: jeu } = await supabase
+    .from("jeux")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  const html = `
+  <h1>Modifier un jeu</h1>
+
+  <form method="POST" action="/jeux/modifier">
+    <input type="hidden" name="id" value="${jeu.id}">
+
+    Nom<br>
+    <input name="nom" value="${jeu.nom}"><br><br>
+
+    Information<br>
+    <textarea name="infos">${jeu.infos || ""}</textarea><br><br>
+
+    <button type="submit">Enregistrer</button>
+  </form>
+  `;
+
+  res.send(renderPage("Modifier jeu", html));
+});
+
 
     // ✅ LIGNES DU TABLEAU
     jeux.forEach(j => {
@@ -571,6 +603,37 @@ app.post("/jeux/ajouter", async (req,res)=>{
   }
 });
 
+// ================= MODIFIER JEU =================
+app.get("/jeux/modifier", async (req, res) => {
+
+  const id = req.query.id;
+
+  const { data: jeu } = await supabase
+    .from("jeux")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  const html = `
+  <h1>Modifier un jeu</h1>
+
+  <form method="POST" action="/jeux/modifier">
+    <input type="hidden" name="id" value="${jeu.id}">
+
+    Nom<br>
+    <input name="nom" value="${jeu.nom}"><br><br>
+
+    Information<br>
+    <textarea name="Oui">${jeu.infos || ""}</textarea><br><br>
+
+    <button type="submit">Enregistrer</button>
+  </form>
+  `;
+
+  res.send(renderPage("Modifier jeu", html));
+});
+
+
 // ===================== SUPPRIMER JEU =====================
 app.post("/jeux/supprimer", async (req,res)=>{
   try {
@@ -833,7 +896,7 @@ app.get("/api/filtrer-jeux", async (req,res)=>{
       if (scoremin && (!j.moyenne || j.moyenne < Number(scoremin)))
         return false;
 
-      if (status === "infos" && (!j.infos || j.infos.trim()===""))
+      if (status === "Oui" && (!j.infos || j.infos.trim()===""))
         return false;
 
       return true;
@@ -901,6 +964,29 @@ Nombre de jeux à afficher:<br>
   <br>
 <button type="button" onclick="chargerStats()">🔄 Rafraîchir</button>
 </form>
+
+const selectJoueur = document.getElementById("joueur");
+
+selectJoueur.addEventListener("change", async () => {
+
+  const id = selectJoueur.value;
+
+  if(id === "all"){
+    document.getElementById("carte-joueur").innerHTML = "";
+    return;
+  }
+
+  const res = await fetch("/api/joueur?id=" + id);
+  const joueur = await res.json();
+
+  document.getElementById("carte-joueur").innerHTML = `
+    <div class="carte-joueur">
+      <h2>${joueur.nom}</h2>
+      <p>Scores : ${joueur.scores}</p>
+      <p>Moyenne : ${joueur.moyenne}</p>
+    </div>
+  `;
+});
 
 <div id="resultatsStats"></div>
 
@@ -1106,6 +1192,10 @@ app.get("/api/filtrer-jeux", async (req, res) => {
     let query = supabase
       .from("jeux")
       .select("*");
+
+    if(req.query.status === "oui"){
+  query = query.not("infos","is",null);
+}  
 
     const { min_joueurs, max_joueurs, temps_max, score_min } = req.query;
 
