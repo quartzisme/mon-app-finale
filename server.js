@@ -134,9 +134,11 @@ function renderPage(title, content){
 // ===================== LOGIN =====================
 app.get("/", (req,res)=>{
     const html = `
-    <audio autoplay loop>
+    <audio id="music" loop>
     <source src="/sounds/sound.mp3" type="audio/mpeg">
     </audio>
+    <button onclick="document.getElementById('music').play()">🔊 Musique</button>
+
     <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
     <form method="POST" action="/login">
         <input name="username" placeholder="Usager" required><br>
@@ -298,37 +300,6 @@ app.get("/jeux/liste", async (req, res) => {
         <th>Moyenne</th>
       </tr>
     `;
-
-// ================= MODIFIER JEU =================
-app.get("/jeux/modifier", async (req, res) => {
-
-  const id = req.query.id;
-
-  const { data: jeu } = await supabase
-    .from("jeux")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  const html = `
-  <h1>Modifier un jeu</h1>
-
-  <form method="POST" action="/jeux/modifier">
-    <input type="hidden" name="id" value="${jeu.id}">
-
-    Nom<br>
-    <input name="nom" value="${jeu.nom}"><br><br>
-
-    Information<br>
-    <textarea name="infos">${jeu.infos || ""}</textarea><br><br>
-
-    <button type="submit">Enregistrer</button>
-  </form>
-  `;
-
-  res.send(renderPage("Modifier jeu", html));
-});
-
 
     // ✅ LIGNES DU TABLEAU
     jeux.forEach(j => {
@@ -1139,7 +1110,7 @@ data.sort((a,b)=> (b.moyenne ?? 0) - (a.moyenne ?? 0));
   }
 
 div.innerHTML =
-  "<div class='result-box'><b>Résultats (Moyenne-Score):</b><br>" +
+  "<div class='result-box'><b>Résultats (Moyenne-Score):</b>" +
   data.map(j =>
     j.nom +
     " — " + (j.moyenne ?? "—") +
@@ -1164,59 +1135,6 @@ app.get("/competitions/liste", async (req,res)=>{
     } catch(err){ res.send(renderPage("Erreur", err.message)); }
 });
 
-// ===================== API FILTRAGE JEUX =====================
-app.get("/api/filtrer-jeux", async (req, res) => {
-  try {
-    let query = supabase
-      .from("jeux")
-      .select("*");
-
-    if(req.query.status === "oui"){
-  query = query.not("infos","is",null);
-}  
-
-    const { min_joueurs, max_joueurs, temps_max, score_min } = req.query;
-
-    if (min_joueurs)
-      query = query.gte("min_joueurs", Number(min_joueurs));
-
-    if (max_joueurs)
-      query = query.lte("max_joueurs", Number(max_joueurs));
-
-    if (temps_max)
-      query = query.lte("temps", Number(temps_max));
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    let jeux = data;
-
-    // filtre sur score moyen
-    if (score_min) {
-      const { data: scores } = await supabase
-        .from("scores")
-        .select("jeu_id, score");
-
-      let moyennes = {};
-      scores.forEach(s => {
-        if (!moyennes[s.jeu_id]) moyennes[s.jeu_id] = { total:0, count:0 };
-        moyennes[s.jeu_id].total += s.score;
-        moyennes[s.jeu_id].count++;
-      });
-
-      jeux = jeux.filter(j => {
-        const m = moyennes[j.id];
-        if (!m) return false;
-        return (m.total / m.count) >= Number(score_min);
-      });
-    }
-
-    res.json(jeux);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // =========== ROUTE STATS ===============
 app.get("/api/stats", async (req,res)=>{
