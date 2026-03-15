@@ -296,7 +296,6 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 temps_min,
                 temps_max,
                 statut,
-                infos,
                 scores(score)
             `)
             .order("nom");
