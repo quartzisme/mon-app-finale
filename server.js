@@ -1015,7 +1015,7 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
                 min_joueurs,
                 max_joueurs,
                 temps_max,
-                infos,
+                statut,
                 scores(
                     score,
                     joueurs(nom)
@@ -1046,15 +1046,16 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
                 };
             })
             .filter((j) => {
-                if (minj && j.min_joueurs < Number(minj)) return false;
-                if (maxj && j.max_joueurs > Number(maxj)) return false;
-                if (tempsmax && j.temps_max > Number(tempsmax)) return false;
+                if (minj && Number(j.min_joueurs) < Number(minj)) return false;
+                if (maxj && Number(j.max_joueurs) > Number(maxj)) return false;
+                if (tempsmax && Number(j.temps_max) > Number(tempsmax)) return false;
 
                 if (scoremin && (j.moyenne === null || j.moyenne < Number(scoremin))) {
                     return false;
                 }
 
-                if (status === "Oui" && (!j.infos || j.infos.trim() === "")) {
+                // Si on choisit Oui, on garde seulement les jeux dont le statut n'est pas vide
+                if (status === "Oui" && (!j.statut || j.statut.trim() === "")) {
                     return false;
                 }
 
@@ -1062,6 +1063,7 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
             });
 
         res.json(resultat);
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1235,15 +1237,15 @@ app.get("/filtrages", requireAuth, (req, res) => {
 
       <label>⌛ Temps maximum :</label>
       <input type="number" name="tempsmax" style="width:110px;">
-      <label> (minutes)</label><br>
+      <label>(minutes)</label><br>
 
       <label>⭐ Score moyen minimum :</label>
       <input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
 
-      Status:<br>
+      <label>Status :</label><br>
       <select name="status">
         <option value=""></option>
-        <option value="Oui">Infos</option>
+        <option value="Oui">Oui</option>
       </select>
       <br>
 
@@ -1258,28 +1260,38 @@ app.get("/filtrages", requireAuth, (req, res) => {
     document.getElementById("formFiltre").addEventListener("submit", async function(e) {
       e.preventDefault();
 
+      const div = document.getElementById("resultatsFiltre");
       const params = new URLSearchParams(new FormData(this));
 
-      const res = await fetch("/api/filtrer-jeux?" + params.toString());
-      const data = await res.json();
+      try {
+        const res = await fetch("/api/filtrer-jeux?" + params.toString());
+        const data = await res.json();
 
-      const div = document.getElementById("resultatsFiltre");
+        if (!res.ok) {
+          div.innerHTML = "<div class='result-box'>Erreur : " + (data.error || "Impossible de filtrer") + "</div>";
+          return;
+        }
 
-      data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
+        if (!Array.isArray(data) || data.length === 0) {
+          div.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
+          return;
+        }
 
-      if (!data || data.length === 0) {
-        div.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
-        return;
+        data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
+
+        div.innerHTML =
+          "<div class='result-box'><b>Résultats (Moyenne-Score) :</b><br>" +
+          data.map(j =>
+            j.nom +
+            " — " + (j.moyenne ?? "—") +
+            (j.joueurs?.length ? " (" + j.joueurs.join(", ") + ")" : "") +
+            (j.statut && j.statut.trim() !== "" ? " — Status: " + j.statut : "")
+          ).join("<br>") +
+          "</div>";
+
+      } catch (err) {
+        div.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
       }
-
-      div.innerHTML =
-        "<div class='result-box'><b>Résultats (Moyenne-Score):</b><br>" +
-        data.map(j =>
-          j.nom +
-          " — " + (j.moyenne ?? "—") +
-          (j.joueurs?.length ? " (" + j.joueurs.join(", ") + ")" : "")
-        ).join("<br>") +
-        "</div>";
     });
     </script>
     `;
