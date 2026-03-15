@@ -1005,7 +1005,16 @@ app.get("/api/scores-par-joueur", requireAuth, async (req, res) => {
 // ===================== API FILTRER JEUX =====================
 app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
     try {
-        const { minj, maxj, tempsmax, scoremin, status } = req.query;
+        const minj = Math.max(0, Number(req.query.minj) || 0);
+        const maxj = Math.max(0, Number(req.query.maxj) || 0);
+        const tempsmax = Math.max(0, Number(req.query.tempsmax) || 0);
+        const scoremin = Math.max(0, Number(req.query.scoremin) || 0);
+        const status = req.query.status || "";
+
+        const hasMinj = req.query.minj !== undefined && req.query.minj !== "";
+        const hasMaxj = req.query.maxj !== undefined && req.query.maxj !== "";
+        const hasTempsmax = req.query.tempsmax !== undefined && req.query.tempsmax !== "";
+        const hasScoremin = req.query.scoremin !== undefined && req.query.scoremin !== "";
 
         const { data: jeux, error } = await supabase
             .from("jeux")
@@ -1046,15 +1055,14 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
                 };
             })
             .filter((j) => {
-                if (minj && Number(j.min_joueurs) < Number(minj)) return false;
-                if (maxj && Number(j.max_joueurs) > Number(maxj)) return false;
-                if (tempsmax && Number(j.temps_max) > Number(tempsmax)) return false;
+                if (hasMinj && Number(j.min_joueurs) < minj) return false;
+                if (hasMaxj && Number(j.max_joueurs) > maxj) return false;
+                if (hasTempsmax && Number(j.temps_max) > tempsmax) return false;
 
-                if (scoremin && (j.moyenne === null || j.moyenne < Number(scoremin))) {
+                if (hasScoremin && (j.moyenne === null || j.moyenne < scoremin)) {
                     return false;
                 }
 
-                // Si on choisit Oui, on garde seulement les jeux dont le statut n'est pas vide
                 if (status === "Oui" && (!j.statut || j.statut.trim() === "")) {
                     return false;
                 }
@@ -1228,39 +1236,45 @@ app.get("/filtrages", requireAuth, (req, res) => {
     const html = `
     <h2>🔍 Filtrer les jeux</h2>
 
-    <form id="formFiltre">
-      <label>👤 Joueurs minimum :</label>
-      <input type="number" name="minj" style="width:90px;"><br>
+    <div class="result-box">
+      <form id="formFiltre">
+        <label>👤 Joueurs minimum :</label>
+        <input type="number" name="minj" min="0" style="width:90px;"><br>
 
-      <label>👥 Joueurs maximum :</label>
-      <input type="number" name="maxj" style="width:90px;"><br>
+        <label>👥 Joueurs maximum :</label>
+        <input type="number" name="maxj" min="0" style="width:90px;"><br>
 
-      <label>⌛ Temps maximum :</label>
-      <input type="number" name="tempsmax" style="width:110px;">
-      <label>(minutes)</label><br>
+        <label>⌛ Temps maximum :</label>
+        <input type="number" name="tempsmax" min="0" style="width:110px;">
+        <label>(minutes)</label><br>
 
-      <label>⭐ Score moyen minimum :</label>
-      <input type="number" step="0.1" name="scoremin" style="width:90px;"><br>
+        <label>⭐ Score moyen minimum :</label>
+        <input type="number" step="0.1" name="scoremin" min="0" style="width:90px;"><br>
 
-      <label>Status :</label><br>
-      <select name="status">
-        <option value=""></option>
-        <option value="Oui">Oui</option>
-      </select>
-      <br>
+        <label>Status :</label><br>
+        <select name="status" style="width:80px;">
+          <option value=""></option>
+          <option value="Oui">Oui</option>
+        </select>
+        <br><br>
 
-      <button type="submit">Rechercher</button>
-    </form>
+        <button type="submit" style="width:auto;">Rechercher</button>
+        <button type="button" id="btnVider" style="width:auto; margin-left:8px;">Vider</button>
+      </form>
+    </div>
 
     <div id="resultatsFiltre"></div>
 
     <a href="/menu">⬅ Retour</a>
 
     <script>
-    document.getElementById("formFiltre").addEventListener("submit", async function(e) {
+    const formFiltre = document.getElementById("formFiltre");
+    const divResultats = document.getElementById("resultatsFiltre");
+    const btnVider = document.getElementById("btnVider");
+
+    formFiltre.addEventListener("submit", async function(e) {
       e.preventDefault();
 
-      const div = document.getElementById("resultatsFiltre");
       const params = new URLSearchParams(new FormData(this));
 
       try {
@@ -1268,18 +1282,18 @@ app.get("/filtrages", requireAuth, (req, res) => {
         const data = await res.json();
 
         if (!res.ok) {
-          div.innerHTML = "<div class='result-box'>Erreur : " + (data.error || "Impossible de filtrer") + "</div>";
+          divResultats.innerHTML = "<div class='result-box'>Erreur : " + (data.error || "Impossible de filtrer") + "</div>";
           return;
         }
 
         if (!Array.isArray(data) || data.length === 0) {
-          div.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
+          divResultats.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
           return;
         }
 
         data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
 
-        div.innerHTML =
+        divResultats.innerHTML =
           "<div class='result-box'><b>Résultats (Moyenne-Score) :</b><br>" +
           data.map(j =>
             j.nom +
@@ -1290,8 +1304,13 @@ app.get("/filtrages", requireAuth, (req, res) => {
           "</div>";
 
       } catch (err) {
-        div.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
+        divResultats.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
       }
+    });
+
+    btnVider.addEventListener("click", () => {
+      formFiltre.reset();
+      divResultats.innerHTML = "";
     });
     </script>
     `;
