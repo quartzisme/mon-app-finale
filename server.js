@@ -305,59 +305,8 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         let html = `
         <h2>⚔️ Liste des jeux</h2>
 
-        <div class="box-info">
-          <h3>➕ Ajouter un jeu</h3>
-
-          <form method="POST" action="/jeux/ajouter">
-            Nom:<br>
-            <input name="nom" required><br>
-
-            Joueurs min:<br>
-            <input type="number" name="min_joueurs" style="width:90px;"><br>
-
-            Joueurs max:<br>
-            <input type="number" name="max_joueurs" style="width:90px;"><br>
-
-            Temps min:<br>
-            <input type="number" name="temps_min" style="width:110px;"><br>
-
-            Temps max:<br>
-            <input type="number" name="temps_max" style="width:110px;"><br>
-
-            <button>Ajouter le jeu</button>
-          </form>
-        </div>
-
-        <br>
-
-        <div class="box-info">
-          <h3>✏️ Modifier / 🗑 Supprimer un jeu</h3>
-
-          <form method="GET" action="/jeux/modifier">
-            Modifier ce jeu:<br>
-            <select name="id" required>
-              <option value="">-- Choisir --</option>
-              ${jeux.map((j) => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
-            </select><br>
-
-            <button>✏ Modifier</button>
-          </form>
-
-          <br>
-
-          <form method="POST" action="/jeux/supprimer" onsubmit="return confirm('Supprimer ce jeu ?');">
-            Supprimer ce jeu:<br>
-
-            <select name="id" required>
-              <option value="">-- Choisir --</option>
-              ${jeux.map((j) => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
-            </select><br>
-
-            <button>🗑 Supprimer</button>
-          </form>
-        </div>
-
-        <br>
+        <button onclick="window.location.href='/jeux/ajouter'">Ajouter un jeu</button><br>
+        <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br><br>
 
         <a href="/menu">⬅ Retour</a><br><br>
 
@@ -426,6 +375,80 @@ app.post("/jeux/ajouter", requireAuth, async (req, res) => {
         if (error) throw error;
 
         res.redirect("/jeux/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.get("/jeux/ajouter", requireAuth, (req, res) => {
+    const html = `
+        <h2>Ajouter un jeu</h2>
+
+        <form method="POST" action="/jeux/ajouter">
+            Nom:<br>
+            <input name="nom" required><br>
+
+            Joueurs min:<br>
+            <input type="number" name="min_joueurs" min="0"><br>
+
+            Joueurs max:<br>
+            <input type="number" name="max_joueurs" min="0"><br>
+
+            Temps min:<br>
+            <input type="number" name="temps_min" min="0"><br>
+
+            Temps max:<br>
+            <input type="number" name="temps_max" min="0"><br><br>
+
+            <button>Ajouter</button>
+        </form>
+
+        <a href="/jeux/liste">⬅ Retour</a>
+    `;
+
+    res.send(renderPage("Ajouter jeu", html));
+});
+
+app.get("/jeux/gerer", requireAuth, async (req, res) => {
+    try {
+        const { data: jeux, error } = await supabase
+            .from("jeux")
+            .select("id, nom")
+            .order("nom");
+
+        if (error) throw error;
+
+        const html = `
+        <h2>Modifier / Supprimer un jeu</h2>
+
+        <div class="result-box">
+            <form method="GET" action="/jeux/modifier">
+                Modifier ce jeu:<br>
+                <select name="id" required>
+                    <option value="">-- Choisir --</option>
+                    ${jeux.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br><br>
+
+                <button type="submit">✏ Modifier</button>
+            </form>
+        </div>
+
+        <div class="result-box">
+            <form method="POST" action="/jeux/supprimer" onsubmit="return confirm('Supprimer ce jeu ?');">
+                Supprimer ce jeu:<br>
+                <select name="id" required>
+                    <option value="">-- Choisir --</option>
+                    ${jeux.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br><br>
+
+                <button type="submit">🗑 Supprimer</button>
+            </form>
+        </div>
+
+        <a href="/jeux/liste">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Gérer les jeux", html));
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
@@ -661,7 +684,8 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
 app.get("/joueurs/ajouter", requireAuth, (req, res) => {
     const html = `
-        <h2>Ajouter joueur</h2>
+        <h2>Ajouter un joueur</h2>
+        <div class="result-box">
         <form method="POST" action="/joueurs/ajouter" enctype="multipart/form-data">
             Nom:<br>
             <input name="nom" required><br>
@@ -674,6 +698,7 @@ app.get("/joueurs/ajouter", requireAuth, (req, res) => {
 
             <button>Ajouter</button>
         </form>
+        </div>
         <a href="/joueurs/liste">⬅ Retour</a>
     `;
 
@@ -1239,7 +1264,7 @@ app.get("/filtrages", requireAuth, (req, res) => {
     <div class="result-box">
       <form id="formFiltre">
         <label>👤 Joueurs minimum :</label>
-        <input type="number" name="minj" min="0" style="width:90px;"><br>
+        <input type="number" name="minj" min="1" style="width:90px;"><br>
 
         <label>👥 Joueurs maximum :</label>
         <input type="number" name="maxj" min="0" style="width:90px;"><br>
