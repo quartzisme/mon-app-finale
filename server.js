@@ -1393,18 +1393,25 @@ app.get("/filtrages", requireAuth, (req, res) => {
 });
 
 // ===================== ROUTES COMPÉTITIONS =====================
+
+// LISTE
 app.get("/competitions/liste", requireAuth, async (req, res) => {
     try {
+        const playWin = req.query.win === "1";
+        const playChampion = req.query.champion === "1";
+
         const { data: comps, error: compsError } = await supabase
             .from("competitions")
             .select(`
                 id,
                 nom,
                 objectif,
+                jeu_id,
                 victoires_pour_gagner,
                 terminee,
                 gagnant_joueur_id,
-                etoile_donnee
+                etoile_donnee,
+                jeux ( id, nom )
             `)
             .order("id", { ascending: false });
 
@@ -1436,8 +1443,32 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
             participantsParCompetition[p.competition_id].push(p);
         }
 
+        function gradateur(victoires) {
+            const niveau = Math.max(0, Number(victoires) || 0);
+            const symboles = ["", "▂", "▃", "▅", "▆", "▇"];
+            return symboles[Math.min(niveau, symboles.length - 1)];
+        }
+
         let html = `
         <h2>🏆 Compétitions</h2>
+
+        ${playWin || playChampion ? `
+        <audio id="trompette" autoplay>
+            <source src="/sounds/trompette.mp3" type="audio/mpeg">
+        </audio>
+        <script>
+            window.addEventListener("load", () => {
+                const a = document.getElementById("trompette");
+                if (!a) return;
+                const p = a.play();
+                if (p !== undefined) {
+                    p.catch(() => {
+                        document.body.addEventListener("click", () => a.play(), { once: true });
+                    });
+                }
+            });
+        </script>
+        ` : ""}
 
         <button onclick="window.location.href='/competitions/ajouter'">Ajouter une nouvelle compétition</button>
         <br><br>
@@ -1452,7 +1483,18 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
 
                 html += `
                 <div class="result-box">
-                    <h3>${escapeHtml(c.nom || "Compétition")}</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <h3 style="margin:0;">${escapeHtml(c.nom || "Compétition")}</h3>
+                        <div>
+                            <button type="button" onclick="window.location.href='/competitions/modifier/${c.id}'" style="width:auto;">✏ Modifier</button>
+
+                            <form method="POST" action="/competitions/supprimer/${c.id}" style="display:inline;" onsubmit="return confirm('Supprimer cette compétition ?');">
+                                <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div><b>Jeu joué :</b> ${escapeHtml(c.jeux?.nom || "Aucun jeu sélectionné")}</div>
                     <div><b>But :</b> ${c.victoires_pour_gagner || 0} victoire(s)</div>
                     ${c.objectif ? `<div><b>Description :</b> ${escapeHtml(c.objectif)}</div>` : ""}
                     <br>
@@ -1462,13 +1504,20 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                     html += `<div>Aucun joueur inscrit.</div>`;
                 } else {
                     for (const p of liste) {
+                        const estGagnant = Number(c.gagnant_joueur_id) === Number(p.joueur_id);
+
                         html += `
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid #ccc; padding:10px; margin:8px 0; border-radius:6px;">
                             <div style="display:flex; align-items:center; gap:12px;">
                                 ${p.joueurs?.image ? `<img src="/images/${encodeURIComponent(p.joueurs.image)}" width="55">` : ""}
                                 <div>
                                     <div><b>${escapeHtml(p.joueurs?.nom || "Joueur inconnu")}</b></div>
-                                    <div>Victoires : ${p.victoires} / ${c.victoires_pour_gagner}</div>
+                                    <div>
+                                        Victoires : ${p.victoires} / ${c.victoires_pour_gagner}
+                                        <span style="font-size:22px; margin-left:8px; color:${estGagnant ? "#c97a00" : "#1e88e5"};">
+                                            ${gradateur(p.victoires)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1483,7 +1532,7 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                                 <button type="submit" style="width:auto;">Victoire</button>
                             </form>
                             `;
-                        } else if (Number(c.gagnant_joueur_id) === Number(p.joueur_id)) {
+                        } else if (estGagnant) {
                             html += `<b>🏅 Gagnant</b>`;
                         }
 
@@ -1498,6 +1547,7 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                     html += `
                     <div style="margin-top:10px;">
                         <b>🏆 Gagnant :</b> ${escapeHtml(gagnant?.joueurs?.nom || "Inconnu")}
+                        ${c.jeux?.nom ? ` — <b>Jeu :</b> ${escapeHtml(c.jeux.nom)}` : ""}
                     </div>
                     `;
 
@@ -1527,15 +1577,22 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
     }
 });
 
-// ===================== Ajouter une competition =====================
+// PAGE AJOUT
 app.get("/competitions/ajouter", requireAuth, async (req, res) => {
     try {
-        const { data: joueurs, error } = await supabase
+        const { data: joueurs, error: joueursError } = await supabase
             .from("joueurs")
             .select("id, nom")
             .order("nom");
 
-        if (error) throw error;
+        if (joueursError) throw joueursError;
+
+        const { data: jeux, error: jeuxError } = await supabase
+            .from("jeux")
+            .select("id, nom")
+            .order("nom");
+
+        if (jeuxError) throw jeuxError;
 
         const joueursJson = JSON.stringify(joueurs || []).replace(/</g, "\\u003c");
 
@@ -1547,11 +1604,20 @@ app.get("/competitions/ajouter", requireAuth, async (req, res) => {
                 Nom de la compétition :<br>
                 <input name="nom" required><br>
 
+                Jeu joué :<br>
+                <select name="jeu_id">
+                    <option value="">-- Choisir un jeu --</option>
+                    ${(jeux || []).map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br>
+
                 Nombre de joueurs :<br>
                 <input type="number" id="nbJoueurs" name="nb_joueurs" min="2" value="2" required><br>
 
                 Combien de victoires pour gagner :<br>
-                <input type="number" name="victoires_pour_gagner" min="1" value="3" required><br><br>
+                <input type="number" name="victoires_pour_gagner" min="1" value="3" required><br>
+
+                Description / objectif :<br>
+                <textarea name="objectif" rows="4"></textarea><br><br>
 
                 <div id="zoneJoueurs"></div>
 
@@ -1596,9 +1662,12 @@ app.get("/competitions/ajouter", requireAuth, async (req, res) => {
     }
 });
 
+// CRÉER
 app.post("/competitions/ajouter", requireAuth, async (req, res) => {
     try {
         const nom = (req.body.nom || "").trim();
+        const objectif = (req.body.objectif || "").trim() || null;
+        const jeu_id = req.body.jeu_id ? Number(req.body.jeu_id) : null;
         const victoires_pour_gagner = Math.max(1, Number(req.body.victoires_pour_gagner) || 1);
 
         let joueur_ids = req.body["joueur_ids[]"] || req.body.joueur_ids || [];
@@ -1625,7 +1694,8 @@ app.post("/competitions/ajouter", requireAuth, async (req, res) => {
             .from("competitions")
             .insert([{
                 nom,
-                objectif: null,
+                objectif,
+                jeu_id,
                 victoires_pour_gagner,
                 terminee: false,
                 etoile_donnee: false
@@ -1653,6 +1723,114 @@ app.post("/competitions/ajouter", requireAuth, async (req, res) => {
     }
 });
 
+// PAGE MODIFIER
+app.get("/competitions/modifier/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data: competition, error: compError } = await supabase
+            .from("competitions")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+        if (compError) throw compError;
+
+        const { data: jeux, error: jeuxError } = await supabase
+            .from("jeux")
+            .select("id, nom")
+            .order("nom");
+
+        if (jeuxError) throw jeuxError;
+
+        const html = `
+        <h2>Modifier une compétition</h2>
+
+        <div class="result-box">
+            <form method="POST" action="/competitions/modifier/${competition.id}">
+                Nom :<br>
+                <input name="nom" value="${escapeHtml(competition.nom || "")}" required><br>
+
+                Jeu joué :<br>
+                <select name="jeu_id">
+                    <option value="">-- Choisir un jeu --</option>
+                    ${(jeux || []).map(j => `
+                        <option value="${j.id}" ${Number(competition.jeu_id) === Number(j.id) ? "selected" : ""}>
+                            ${escapeHtml(j.nom)}
+                        </option>
+                    `).join("")}
+                </select><br>
+
+                Victoires pour gagner :<br>
+                <input type="number" name="victoires_pour_gagner" min="1" value="${competition.victoires_pour_gagner || 1}" required><br>
+
+                Description / objectif :<br>
+                <textarea name="objectif" rows="4">${escapeHtml(competition.objectif || "")}</textarea><br><br>
+
+                <button type="submit">Enregistrer</button>
+            </form>
+        </div>
+
+        <a href="/competitions/liste">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Modifier compétition", html));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+// MODIFIER
+app.post("/competitions/modifier/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const nom = (req.body.nom || "").trim();
+        const objectif = (req.body.objectif || "").trim() || null;
+        const jeu_id = req.body.jeu_id ? Number(req.body.jeu_id) : null;
+        const victoires_pour_gagner = Math.max(1, Number(req.body.victoires_pour_gagner) || 1);
+
+        if (!nom) {
+            return res.send(renderPage("Erreur", "Le nom est requis."));
+        }
+
+        const { error } = await supabase
+            .from("competitions")
+            .update({
+                nom,
+                objectif,
+                jeu_id,
+                victoires_pour_gagner
+            })
+            .eq("id", id);
+
+        if (error) throw error;
+
+        res.redirect("/competitions/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+// SUPPRIMER
+app.post("/competitions/supprimer/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from("competitions")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
+
+        res.redirect("/competitions/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+// AJOUTER UNE VICTOIRE
 app.post("/competitions/victoire", requireAuth, async (req, res) => {
     try {
         const competition_id = Number(req.body.competition_id);
@@ -1702,14 +1880,17 @@ app.post("/competitions/victoire", requireAuth, async (req, res) => {
                 .eq("id", competition_id);
 
             if (updateCompError) throw updateCompError;
+
+            return res.redirect("/competitions/liste?win=1&champion=1");
         }
 
-        res.redirect("/competitions/liste");
+        res.redirect("/competitions/liste?win=1");
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
 });
 
+// DONNER UNE ÉTOILE
 app.post("/competitions/etoile", requireAuth, async (req, res) => {
     try {
         const competition_id = Number(req.body.competition_id);
@@ -1763,7 +1944,6 @@ app.post("/competitions/etoile", requireAuth, async (req, res) => {
         res.send(renderPage("Erreur", err.message));
     }
 });
-
 
 // ===================== SERVEUR =====================
 const PORT = process.env.PORT || 3000;
