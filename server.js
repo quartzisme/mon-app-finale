@@ -72,6 +72,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.use("/images", express.static(join(__dirname, "public/images")));
+app.use("/sounds", express.static(join(__dirname, "public/sounds")));
 app.use("/sounds", express.static(join(__dirname, "public")));
 
 function renderPage(title, content) {
@@ -198,34 +199,109 @@ app.get("/", (req, res) => {
     <script>
       window.addEventListener("load", () => {
         const music = document.getElementById("music");
+        if (!music) return;
+
         const playPromise = music.play();
 
         if (playPromise !== undefined) {
           playPromise.catch(() => {
-            document.body.addEventListener("click", () => music.play(), { once: true });
+            const demarrer = () => music.play().catch(() => {});
+            document.body.addEventListener("click", demarrer, { once: true });
+            document.body.addEventListener("touchstart", demarrer, { once: true });
           });
         }
       });
 
       function togglePassword() {
         const p = document.getElementById("password");
-        p.type = p.type === "password" ? "text" : "password";
+        const eye = document.getElementById("toggle-eye");
+
+        if (p.type === "password") {
+          p.type = "text";
+          eye.textContent = "🙈";
+        } else {
+          p.type = "password";
+          eye.textContent = "👁";
+        }
       }
     </script>
 
-    <button type="button" onclick="document.getElementById('music').play()">🔊 Musique</button>
+    <style>
+      .login-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        text-align: center;
+      }
 
-    <br><br>
-    <img src="/images/de.jpg" style="max-width:200px; margin-bottom:20px;">
+      .login-image {
+        display: block;
+        margin: 10px auto 20px auto;
+        max-width: 220px;
+        width: 100%;
+        height: auto;
+      }
 
-    <form method="POST" action="/login">
-      <input name="username" placeholder="Usager" required><br>
+      .login-form {
+        width: 100%;
+        max-width: 420px;
+      }
 
-      <input type="password" id="password" name="password" placeholder="Mot de passe" required><br>
-      <button type="button" onclick="togglePassword()">👁 Afficher / masquer</button><br><br>
+      .password-wrap {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+        margin: 0 auto;
+      }
 
-      <button>Entrer</button>
-    </form>
+      .password-wrap input {
+        width: 100%;
+        padding-right: 48px;
+      }
+
+      .password-toggle {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 36px;
+        height: 36px;
+        border: none;
+        background: transparent;
+        box-shadow: none;
+        cursor: pointer;
+        font-size: 20px;
+        padding: 0;
+      }
+
+      .password-toggle:hover {
+        transform: translateY(-50%);
+        box-shadow: none;
+      }
+
+      @media (max-width: 600px) {
+        .login-image {
+          max-width: 170px;
+        }
+      }
+    </style>
+
+    <div class="login-wrapper">
+      <img src="/images/de.jpg" class="login-image" alt="Logo">
+
+      <form method="POST" action="/login" class="login-form">
+        <input name="username" placeholder="Usager" required><br>
+
+        <div class="password-wrap">
+          <input type="password" id="password" name="password" placeholder="Mot de passe" required>
+          <button type="button" id="toggle-eye" class="password-toggle" onclick="togglePassword()" aria-label="Afficher ou masquer le mot de passe">👁</button>
+        </div>
+
+        <br>
+        <button>Entrer</button>
+      </form>
+    </div>
     `;
 
     res.send(renderPage("Bienvenue", html));
@@ -1444,9 +1520,14 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
         }
 
         function gradateur(victoires) {
-            const niveau = Math.max(0, Number(victoires) || 0);
-            const symboles = ["", "▂", "▃", "▅", "▆", "▇"];
-            return symboles[Math.min(niveau, symboles.length - 1)];
+            const nb = Math.max(0, Number(victoires) || 0);
+            const symboles = ["▂", "▃", "▅", "▆", "▇"];
+
+            if (nb === 0) return "";
+
+            return Array.from({ length: nb }, (_, i) => {
+                return symboles[Math.min(i, symboles.length - 1)];
+            }).join(" ");
         }
 
         let html = `
