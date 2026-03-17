@@ -177,6 +177,33 @@ function renderPage(title, content) {
           .inline-form {
             display: inline;
           }
+
+          .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          @media (max-width: 600px) {
+            body {
+              font-size: 17px;
+            }
+
+            .jeux-table {
+              font-size: 14px;
+              min-width: 760px;
+            }
+
+            .jeux-table th,
+            .jeux-table td {
+              padding: 6px;
+              white-space: nowrap;
+            }
+
+            .page-container {
+              padding: 10px;
+            }
+          }
         </style>
     </head>
 
@@ -221,7 +248,7 @@ app.get("/", (req, res) => {
           eye.textContent = "🙈";
         } else {
           p.type = "password";
-          eye.textContent = "👁";
+          eye.textContent = "👀";
         }
       }
     </script>
@@ -385,11 +412,12 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br><br>
 
         <a href="/menu">⬅ Retour</a><br><br>
-
+      <div class="table-wrap">
         <table class="jeux-table">
           <tr>
             <th>id</th>
             <th>Nom</th>
+            <th>Extensions</th>
             <th>Joueurs</th>
             <th>Temps</th>
             <th>Statut</th>
@@ -411,6 +439,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
             <tr>
               <td>${j.id}</td>
               <td>${escapeHtml(j.nom)}</td>
+              <td>${escapeHtml(j.extensions || "")}</td>
               <td>${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
               <td>${j.temps_min ?? "—"}-${j.temps_max ?? "—"} min</td>
               <td>${escapeHtml(j.statut || "")}</td>
@@ -419,7 +448,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
             `;
         });
 
-        html += `</table><br><a href="/menu">⬅ Retour</a>`;
+      html += `</table></div><br><a href="/menu">⬅ Retour</a>`;
 
         res.send(renderPage("Liste des jeux", html));
     } catch (err) {
@@ -428,23 +457,30 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
 });
 
 // ===================== AJOUTER JEU =====================
-app.post("/jeux/ajouter", requireAuth, async (req, res) => {
+app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) => {
     try {
         const {
             nom,
+            extensions,
             min_joueurs,
             max_joueurs,
             temps_min,
-            temps_max
+            temps_max,
+            bgg_average_rating
         } = req.body;
+
+        const image = req.file ? req.file.filename : null;
 
         const { error } = await supabase.from("jeux").insert([
             {
                 nom: nom?.trim(),
+                extensions: extensions?.trim() || null,
                 min_joueurs: toIntOrNull(min_joueurs),
                 max_joueurs: toIntOrNull(max_joueurs),
                 temps_min: toIntOrNull(temps_min),
-                temps_max: toIntOrNull(temps_max)
+                temps_max: toIntOrNull(temps_max),
+                bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null,
+                image
             }
         ]);
 
@@ -460,10 +496,12 @@ app.get("/jeux/ajouter", requireAuth, (req, res) => {
     const html = `
         <h2>Ajouter un jeu</h2>
 
-        <div class="result-box">
-        <form method="POST" action="/jeux/ajouter">
+        <form method="POST" action="/jeux/ajouter" enctype="multipart/form-data">
             Nom:<br>
             <input name="nom" required><br>
+
+            Extensions:<br>
+            <input name="extensions"><br>
 
             Joueurs min:<br>
             <input type="number" name="min_joueurs" min="0"><br>
@@ -475,11 +513,16 @@ app.get("/jeux/ajouter", requireAuth, (req, res) => {
             <input type="number" name="temps_min" min="0"><br>
 
             Temps max:<br>
-            <input type="number" name="temps_max" min="0"><br><br>
+            <input type="number" name="temps_max" min="0"><br>
+
+            BGG average rating:<br>
+            <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating"><br>
+
+            Image:<br>
+            <input type="file" name="image" accept="image/*"><br><br>
 
             <button>Ajouter</button>
         </form>
-        </div>
 
         <a href="/jeux/liste">⬅ Retour</a>
     `;
@@ -555,7 +598,7 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
         const html = `
         <h1>Modifier un jeu</h1>
 
-        <form method="POST" action="/jeux/modifier">
+        <form method="POST" action="/jeux/modifier" enctype="multipart/form-data">
           <input type="hidden" name="id" value="${jeu.id}">
 
           Nom<br>
@@ -565,22 +608,27 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
           <input name="extensions" value="${escapeHtml(jeu.extensions || "")}"><br><br>
 
           Joueurs min<br>
-          <input type="number" name="min_joueurs" value="${jeu.min_joueurs ?? ""}"><br><br>
+          <input type="number" name="min_joueurs" min="0" value="${jeu.min_joueurs ?? ""}"><br><br>
 
           Joueurs max<br>
-          <input type="number" name="max_joueurs" value="${jeu.max_joueurs ?? ""}"><br><br>
+          <input type="number" name="max_joueurs" min="0" value="${jeu.max_joueurs ?? ""}"><br><br>
 
           Temps min<br>
-          <input type="number" name="temps_min" value="${jeu.temps_min ?? ""}"><br><br>
+          <input type="number" name="temps_min" min="0" value="${jeu.temps_min ?? ""}"><br><br>
 
           Temps max<br>
-          <input type="number" name="temps_max" value="${jeu.temps_max ?? ""}"><br><br>
+          <input type="number" name="temps_max" min="0" value="${jeu.temps_max ?? ""}"><br><br>
 
           Statut<br>
           <input name="statut" value="${escapeHtml(jeu.statut || "")}"><br><br>
 
-          Informations<br>
-          <textarea name="infos" rows="6">${escapeHtml(jeu.infos || "")}</textarea><br><br>
+          BGG average rating<br>
+          <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating" value="${jeu.bgg_average_rating ?? ""}"><br><br>
+
+          ${jeu.image ? `<div>Image actuelle :<br><img src="/images/${encodeURIComponent(jeu.image)}" width="90"></div><br>` : ""}
+
+          Nouvelle image<br>
+          <input type="file" name="image" accept="image/*"><br><br>
 
           <button type="submit">Enregistrer</button>
         </form>
@@ -594,7 +642,7 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
     }
 });
 
-app.post("/jeux/modifier", requireAuth, async (req, res) => {
+app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res) => {
     try {
         const {
             id,
@@ -605,7 +653,8 @@ app.post("/jeux/modifier", requireAuth, async (req, res) => {
             temps_min,
             temps_max,
             statut,
-            infos
+            infos,
+            bgg_average_rating
         } = req.body;
 
         if (!id) {
@@ -620,8 +669,13 @@ app.post("/jeux/modifier", requireAuth, async (req, res) => {
             temps_min: toIntOrNull(temps_min),
             temps_max: toIntOrNull(temps_max),
             statut: statut?.trim() || null,
-            infos: infos?.trim() || null
+            infos: infos?.trim() || null,
+            bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null
         };
+
+        if (req.file) {
+            updateData.image = req.file.filename;
+        }
 
         const { error } = await supabase
             .from("jeux")
@@ -1114,12 +1168,15 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
         const maxj = Math.max(0, Number(req.query.maxj) || 0);
         const tempsmax = Math.max(0, Number(req.query.tempsmax) || 0);
         const scoremin = Math.max(0, Number(req.query.scoremin) || 0);
+        const bggmin = Math.max(0, Number(req.query.bggmin) || 0);
         const status = req.query.status || "";
+        const extension = req.query.extension || "";
 
         const hasMinj = req.query.minj !== undefined && req.query.minj !== "";
         const hasMaxj = req.query.maxj !== undefined && req.query.maxj !== "";
         const hasTempsmax = req.query.tempsmax !== undefined && req.query.tempsmax !== "";
         const hasScoremin = req.query.scoremin !== undefined && req.query.scoremin !== "";
+        const hasBggmin = req.query.bggmin !== undefined && req.query.bggmin !== "";
 
         const { data: jeux, error } = await supabase
             .from("jeux")
@@ -1130,6 +1187,8 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
                 max_joueurs,
                 temps_max,
                 statut,
+                extensions,
+                bgg_average_rating,
                 scores(
                     score,
                     joueurs(nom)
@@ -1155,7 +1214,8 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
 
                 return {
                     ...j,
-                    moyenne: moyenne !== null ? Number(moyenne.toFixed(2)) : null,
+                    moyenne: moyenne !== null ? Number(moyenne.toFixed(2)) : null
+                ,
                     joueurs
                 };
             })
@@ -1168,7 +1228,15 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
                     return false;
                 }
 
+                if (hasBggmin && (j.bgg_average_rating === null || Number(j.bgg_average_rating) < bggmin)) {
+                    return false;
+                }
+
                 if (status === "Oui" && (!j.statut || j.statut.trim() === "")) {
+                    return false;
+                }
+
+                if (extension === "Oui" && (!j.extensions || j.extensions.trim() === "")) {
                     return false;
                 }
 
@@ -1207,6 +1275,13 @@ app.get("/stats", requireAuth, async (req, res) => {
             <option value="">-- Choisir --</option>
             <option value="all">Tous les joueurs</option>
             ${options}
+          </select>
+          <br>
+
+          Source du classement:<br>
+          <select id="sourceClassement" style="width:140px;">
+            <option value="local">Notes locales</option>
+            <option value="bgg">BGG</option>
           </select>
           <br>
 
@@ -1264,9 +1339,30 @@ app.get("/stats", requireAuth, async (req, res) => {
           \`).join("");
         }
 
+        function renderBloc(titre, items, modeLabel) {
+          let html = "<div class='result-box'><h3>" + titre + "</h3>";
+
+          if (!items || items.length === 0) {
+            html += "Aucune donnée";
+          } else {
+            items.forEach(j => {
+              html += "<div style='display:flex; align-items:center; gap:12px; margin:10px 0;'>";
+              if (j.image) {
+                html += "<img src='/images/" + encodeURIComponent(j.image) + "' width='55'>";
+              }
+              html += "<div><b>" + j.jeu + "</b><br>" + modeLabel + " : " + Number(j.moyenne).toFixed(2) + "</div>";
+              html += "</div>";
+            });
+          }
+
+          html += "</div>";
+          return html;
+        }
+
         async function chargerStats() {
           const joueur = document.getElementById("choixJoueur").value;
           const nb = document.getElementById("nbTop")?.value || 5;
+          const source = document.getElementById("sourceClassement").value;
           const div = document.getElementById("resultatsStats");
 
           afficherCartesJoueurs(joueur);
@@ -1277,7 +1373,7 @@ app.get("/stats", requireAuth, async (req, res) => {
           }
 
           try {
-            const res = await fetch("/api/stats?joueur=" + encodeURIComponent(joueur) + "&nb=" + encodeURIComponent(nb));
+            const res = await fetch("/api/stats?joueur=" + encodeURIComponent(joueur) + "&nb=" + encodeURIComponent(nb) + "&source=" + encodeURIComponent(source));
             const data = await res.json();
 
             if (!data || !data.meilleurs) {
@@ -1285,27 +1381,11 @@ app.get("/stats", requireAuth, async (req, res) => {
               return;
             }
 
+            const modeLabel = source === "bgg" ? "BGG" : "Note locale";
+
             let html = "";
-
-            html += "<div class='result-box'><h3>🏆 Meilleurs jeux</h3>";
-            if (data.meilleurs.length === 0) {
-              html += "Aucune donnée";
-            } else {
-              data.meilleurs.forEach(j => {
-                html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
-              });
-            }
-            html += "</div>";
-
-            html += "<div class='result-box'><h3>💀 Pires jeux</h3>";
-            if (data.pires.length === 0) {
-              html += "Aucune donnée";
-            } else {
-              data.pires.forEach(j => {
-                html += j.jeu + " (" + j.moyenne.toFixed(2) + ")<br>";
-              });
-            }
-            html += "</div>";
+            html += renderBloc("🏆 Meilleurs jeux", data.meilleurs, modeLabel);
+            html += renderBloc("💀 Pires jeux", data.pires, modeLabel);
 
             div.innerHTML = html;
           } catch (e) {
@@ -1316,9 +1396,11 @@ app.get("/stats", requireAuth, async (req, res) => {
         document.addEventListener("DOMContentLoaded", () => {
           const select = document.getElementById("choixJoueur");
           const nbTop = document.getElementById("nbTop");
+          const source = document.getElementById("sourceClassement");
 
           select.addEventListener("change", chargerStats);
           nbTop.addEventListener("change", chargerStats);
+          source.addEventListener("change", chargerStats);
         });
         </script>
         `;
@@ -1334,13 +1416,72 @@ app.get("/api/stats", requireAuth, async (req, res) => {
     try {
         const joueur = req.query.joueur;
         const nb = Number(req.query.nb) || 5;
+        const source = req.query.source || "local";
+
+        if (source === "bgg") {
+            let resultats = [];
+
+            if (joueur === "all") {
+                const { data: jeux, error } = await supabase
+                    .from("jeux")
+                    .select("id, nom, image, bgg_average_rating")
+                    .not("bgg_average_rating", "is", null);
+
+                if (error) throw error;
+
+                resultats = (jeux || []).map(j => ({
+                    jeu: j.nom,
+                    image: j.image || null,
+                    moyenne: Number(j.bgg_average_rating)
+                }));
+            } else {
+                const { data: scores, error } = await supabase
+                    .from("scores")
+                    .select(`
+                        jeu_id,
+                        jeux (
+                            id,
+                            nom,
+                            image,
+                            bgg_average_rating
+                        )
+                    `)
+                    .eq("joueur_id", joueur);
+
+                if (error) throw error;
+
+                const uniques = {};
+                (scores || []).forEach(s => {
+                    const jeu = s.jeux;
+                    if (!jeu || jeu.bgg_average_rating === null) return;
+                    uniques[jeu.id] = {
+                        jeu: jeu.nom,
+                        image: jeu.image || null,
+                        moyenne: Number(jeu.bgg_average_rating)
+                    };
+                });
+
+                resultats = Object.values(uniques);
+            }
+
+            resultats.sort((a, b) => b.moyenne - a.moyenne);
+
+            return res.json({
+                meilleurs: resultats.slice(0, nb),
+                pires: resultats.slice(-nb).reverse()
+            });
+        }
 
         let query = supabase
             .from("scores")
             .select(`
                 score,
                 joueur_id,
-                jeux ( nom )
+                jeux (
+                    id,
+                    nom,
+                    image
+                )
             `);
 
         if (joueur !== "all") {
@@ -1354,21 +1495,42 @@ app.get("/api/stats", requireAuth, async (req, res) => {
             return res.json({ meilleurs: [], pires: [] });
         }
 
-        const stats = {};
+        let resultats = [];
 
-        scores.forEach((s) => {
-            const nomJeu = s.jeux?.nom;
-            if (!nomJeu) return;
+        if (joueur === "all") {
+            const stats = {};
 
-            if (!stats[nomJeu]) stats[nomJeu] = { total: 0, count: 0 };
-            stats[nomJeu].total += Number(s.score);
-            stats[nomJeu].count += 1;
-        });
+            scores.forEach((s) => {
+                const jeu = s.jeux;
+                if (!jeu?.nom) return;
 
-        const resultats = Object.keys(stats).map((jeu) => ({
-            jeu,
-            moyenne: stats[jeu].total / stats[jeu].count
-        }));
+                if (!stats[jeu.id]) {
+                    stats[jeu.id] = {
+                        jeu: jeu.nom,
+                        image: jeu.image || null,
+                        total: 0,
+                        count: 0
+                    };
+                }
+
+                stats[jeu.id].total += Number(s.score);
+                stats[jeu.id].count += 1;
+            });
+
+            resultats = Object.values(stats).map(j => ({
+                jeu: j.jeu,
+                image: j.image,
+                moyenne: j.total / j.count
+            }));
+        } else {
+            resultats = (scores || [])
+                .filter(s => s.jeux?.nom)
+                .map(s => ({
+                    jeu: s.jeux.nom,
+                    image: s.jeux.image || null,
+                    moyenne: Number(s.score)
+                }));
+        }
 
         resultats.sort((a, b) => b.moyenne - a.moyenne);
 
@@ -1389,7 +1551,7 @@ app.get("/filtrages", requireAuth, (req, res) => {
     <div class="result-box">
       <form id="formFiltre">
         <label>👤 Joueurs minimum :</label>
-        <input type="number" name="minj" min="1" style="width:90px;"><br>
+        <input type="number" name="minj" min="0" style="width:90px;"><br>
 
         <label>👥 Joueurs maximum :</label>
         <input type="number" name="maxj" min="0" style="width:90px;"><br>
@@ -1401,8 +1563,17 @@ app.get("/filtrages", requireAuth, (req, res) => {
         <label>⭐ Score moyen minimum :</label>
         <input type="number" step="0.1" name="scoremin" min="0" style="width:90px;"><br>
 
+        <label>🎲 Score moyen minimum BGG :</label>
+        <input type="number" step="0.1" name="bggmin" min="0" max="10" style="width:90px;"><br>
+
         <label>Status :</label><br>
         <select name="status" style="width:80px;">
+          <option value=""></option>
+          <option value="Oui">Oui</option>
+        </select><br>
+
+        <label>Extension :</label><br>
+        <select name="extension" style="width:80px;">
           <option value=""></option>
           <option value="Oui">Oui</option>
         </select>
@@ -1444,12 +1615,14 @@ app.get("/filtrages", requireAuth, (req, res) => {
         data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
 
         divResultats.innerHTML =
-          "<div class='result-box'><b>Résultats (Moyenne-Score) :</b><br>" +
+          "<div class='result-box'><b>Résultats :</b><br>" +
           data.map(j =>
             j.nom +
-            " — " + (j.moyenne ?? "—") +
+            " — local : " + (j.moyenne ?? "—") +
+            " — BGG : " + (j.bgg_average_rating ?? "—") +
             (j.joueurs?.length ? " (" + j.joueurs.join(", ") + ")" : "") +
-            (j.statut && j.statut.trim() !== "" ? " — Status: " + j.statut : "")
+            (j.statut && j.statut.trim() !== "" ? " — Status: " + j.statut : "") +
+            (j.extensions && j.extensions.trim() !== "" ? " — Extension: " + j.extensions : "")
           ).join("<br>") +
           "</div>";
 
