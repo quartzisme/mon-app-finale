@@ -1573,35 +1573,63 @@ app.get("/filtrages", requireAuth, (req, res) => {
 
         data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
 
-        divResultats.innerHTML = `
-          <div class="table-wrap">
-            <table class="jeux-table">
-              <tr>
-                <th>Nom</th>
-                <th>Joueurs</th>
-                <th>Temps</th>
-                <th>⭐ Local</th>
-                <th>⬢ BGG</th>
-                <th>Status</th>
-                <th>Extension</th>
-                <th>Détails scores</th>
-              </tr>
-              ${data.map(j => `
-                <tr>
-                  <td><b>${txt(j.nom)}</b></td>
-                  <td>${txt(j.min_joueurs)}-${txt(j.max_joueurs)}</td>
-                  <td>${txt(j.temps_max)} min</td>
-                  <td>${txt(j.moyenne)}</td>
-                  <td>${txt(j.bgg_average_rating)}</td>
-                  <td>${j.statut && j.statut.trim() !== "" ? j.statut : "—"}</td>
-                  <td>${j.extensions && j.extensions.trim() !== "" ? j.extensions : "—"}</td>
-                  <td>${j.joueurs?.length ? j.joueurs.join("<br>") : "—"}</td>
-                </tr>
-              `).join("")}
-            </table>
-          </div>
-        `;
-      } catch (err) {
+function txt(v) {
+  return (v === null || v === undefined || v === "") ? "—" : v;
+}
+
+formFiltre.addEventListener("submit", async function(e) {
+  e.preventDefault();
+
+  const params = new URLSearchParams(new FormData(this));
+
+  try {
+    const res = await fetch("/api/filtrer-jeux?" + params.toString());
+    const data = await res.json();
+
+    if (!res.ok) {
+      divResultats.innerHTML = "<div class='result-box'>Erreur : " + (data.error || "Impossible de filtrer") + "</div>";
+      return;
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      divResultats.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
+      return;
+    }
+
+    data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
+
+    divResultats.innerHTML =
+      "<div class='table-wrap'>" +
+        "<table class='jeux-table'>" +
+          "<tr>" +
+            "<th>Nom</th>" +
+            "<th>Joueurs</th>" +
+            "<th>Temps</th>" +
+            "<th>⭐ Local</th>" +
+            "<th>⬢ BGG</th>" +
+            "<th>Status</th>" +
+            "<th>Extension</th>" +
+            "<th>Détails scores</th>" +
+          "</tr>" +
+          data.map(j =>
+            "<tr>" +
+              "<td><b>" + txt(j.nom) + "</b></td>" +
+              "<td>" + txt(j.min_joueurs) + "-" + txt(j.max_joueurs) + "</td>" +
+              "<td>" + txt(j.temps_max) + " min</td>" +
+              "<td>" + txt(j.moyenne) + "</td>" +
+              "<td>" + txt(j.bgg_average_rating) + "</td>" +
+              "<td>" + ((j.statut && j.statut.trim() !== "") ? j.statut : "—") + "</td>" +
+              "<td>" + ((j.extensions && j.extensions.trim() !== "") ? j.extensions : "—") + "</td>" +
+              "<td>" + (j.joueurs?.length ? j.joueurs.join("<br>") : "—") + "</td>" +
+            "</tr>"
+          ).join("") +
+        "</table>" +
+      "</div>";
+  } catch (err) {
+    divResultats.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
+  }
+});
+        } catch (err) {
         divResultats.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
       }
     });
