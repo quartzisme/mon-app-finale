@@ -228,6 +228,45 @@ function renderPage(title, content) {
               z-index: 5;
               box-shadow: 0 10px 22px rgba(0,0,0,0.28);
             }
+            .zoom-overlay {
+              position: fixed;
+              inset: 0;
+              background: rgba(0,0,0,0.7);
+              display: none;
+              align-items: center;
+              justify-content: center;
+              z-index: 9999;
+              padding: 20px;
+            }
+
+            .zoom-overlay.show {
+              display: flex;
+            }
+
+            .zoom-box {
+              background: white;
+              border-radius: 16px;
+              padding: 14px;
+              max-width: min(92vw, 700px);
+              max-height: 90vh;
+              overflow: auto;
+              transform: scale(0.88);
+              transition: transform 0.18s ease;
+            }
+
+            .zoom-overlay.show .zoom-box {
+              transform: scale(1);
+            }
+
+            .player-card {
+              transition: transform 0.18s ease, box-shadow 0.18s ease;
+              cursor: pointer;
+            }
+
+            .player-card:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 10px 20px rgba(0,0,0,0.18);
+            }             
         </style>
     </head>
 
@@ -385,6 +424,7 @@ app.get("/menu", requireAuth, (req, res) => {
             <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
             <li><a href="/filtrages">🔍 Filtrages</a></li>
             <li><a href="/competitions/liste">🏆 Compétitions</a></li>
+            <li><a href="/jeux-desires">🛒 Jeux désirés</a></li>
             <li><a href="/logout">⏻ Déconnexion</a></li>
           </div>
         </ul>
@@ -439,7 +479,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
       <div class="table-wrap">
         <table class="jeux-table">
           <tr>
-            <th>id</th>
+            <th>#</th>
             <th>Nom</th>
             <th>Extensions</th>
             <th>Joueurs</th>
@@ -449,7 +489,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
           </tr>
         `;
 
-        jeux.forEach((j) => {
+          jeux.forEach((j, index) => {
             let moyenne = "—";
 
             if (j.scores && j.scores.length > 0) {
@@ -461,7 +501,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
 
             html += `
             <tr>
-              <td>${j.id}</td>
+              <td>${index + 1}</td>
               <td>${escapeHtml(j.nom)}</td>
               <td>${escapeHtml(j.extensions || "")}</td>
               <td>${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
@@ -755,11 +795,26 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
         if (error) throw error;
 
+        const ordrePrincipal = ["VINCENT", "MARC", "JULIE"];
+
         const joueurs = [...(joueursBrut || [])].sort((a, b) => {
-            const aBGG = String(a.nom || "").trim().toUpperCase() === "BGG";
-            const bBGG = String(b.nom || "").trim().toUpperCase() === "BGG";
+            const na = String(a.nom || "").trim().toUpperCase();
+            const nb = String(b.nom || "").trim().toUpperCase();
+
+            const aBGG = na === "BGG";
+            const bBGG = nb === "BGG";
             if (aBGG !== bBGG) return aBGG ? 1 : -1;
-            return String(a.nom || "").localeCompare(String(b.nom || ""), "fr", { sensitivity: "base" });
+
+            const ia = ordrePrincipal.indexOf(na);
+            const ib = ordrePrincipal.indexOf(nb);
+
+            const aPrincipal = ia !== -1;
+            const bPrincipal = ib !== -1;
+
+            if (aPrincipal && bPrincipal) return ia - ib;
+            if (aPrincipal !== bPrincipal) return aPrincipal ? -1 : 1;
+
+            return na.localeCompare(nb, "fr", { sensitivity: "base" });
         });
 
         const { count: totalJeux, error: totalJeuxError } = await supabase
@@ -769,7 +824,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         if (totalJeuxError) throw totalJeuxError;
 
         const rows = await Promise.all(
-            joueurs.map(async (j) => {
+            joueurs.map(async (j, index) => {
                 const isBGG = String(j.nom || "").trim().toUpperCase() === "BGG";
                 const nbScores = j.scores ? j.scores.length : 0;
                 const pourcentage = totalJeux
@@ -800,7 +855,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 }
 
                 return `
-                <div class="result-box player-card" style="margin-bottom:15px; cursor:pointer;" onclick="this.classList.toggle('expanded')">
+                <div class="result-box player-card" id="player-card-${index}" onclick="ouvrirZoomJoueur('player-card-${index}')">
                   <table style="width:100%;">
                     <tr>
                       <td style="width:120px; text-align:center;">
@@ -817,10 +872,10 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
                         <br>
 
-                        <a href="/joueurs/modifier/${j.id}">✏ Modifier</a>
+                        <a href="/joueurs/modifier/${j.id}" onclick="event.stopPropagation()">✏ Modifier</a>
                         &nbsp;|&nbsp;
 
-                        <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur ?');">
+                        <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="event.stopPropagation(); return confirm('Supprimer ce joueur ?');">
                           <button type="submit" style="width:auto;">🗑 Supprimer</button>
                         </form>
                       </td>
@@ -835,7 +890,35 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         <h2>👥 Gestion des joueurs</h2>
         <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button><br>
         <br><br>
+
         ${rows.join("")}
+
+        <div id="zoomOverlay" class="zoom-overlay" onclick="fermerZoomJoueur()">
+          <div class="zoom-box" id="zoomBox" onclick="event.stopPropagation()"></div>
+        </div>
+
+        <script>
+        function ouvrirZoomJoueur(cardId) {
+          const card = document.getElementById(cardId);
+          const overlay = document.getElementById("zoomOverlay");
+          const box = document.getElementById("zoomBox");
+
+          if (!card || !overlay || !box) return;
+
+          box.innerHTML = card.outerHTML;
+          overlay.classList.add("show");
+        }
+
+        function fermerZoomJoueur() {
+          const overlay = document.getElementById("zoomOverlay");
+          if (overlay) overlay.classList.remove("show");
+        }
+
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") fermerZoomJoueur();
+        });
+        </script>
+
         <a href="/menu">⬅ Retour</a>
         `;
 
@@ -2286,6 +2369,116 @@ app.post("/competitions/etoile", requireAuth, async (req, res) => {
         if (updateCompError) throw updateCompError;
 
         res.redirect("/competitions/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+// ===================== ROUTES JEUX DÉSIRÉS =====================
+app.get("/jeux-desires", requireAuth, async (req, res) => {
+    try {
+        const { data: jeux, error } = await supabase
+            .from("jeux_desires")
+            .select("*")
+            .order("nom");
+
+        if (error) throw error;
+
+        const html = `
+        <h2>🛒 Jeux désirés</h2>
+
+        <div class="box-info">
+            <h3>➕ Ajouter un jeu désiré</h3>
+
+            <form method="POST" action="/jeux-desires/ajouter">
+                Nom du jeu:<br>
+                <input name="nom" required><br>
+
+                Prix d'achat:<br>
+                <input type="number" name="prix_achat" min="0" step="0.01"><br>
+
+                Notes:<br>
+                <textarea name="notes" rows="4"></textarea><br><br>
+
+                <button>Ajouter</button>
+            </form>
+        </div>
+
+        <br>
+
+        <div class="table-wrap">
+            <table class="jeux-table">
+                <tr>
+                    <th>#</th>
+                    <th>Nom</th>
+                    <th>Prix d'achat</th>
+                    <th>Notes</th>
+                    <th>Action</th>
+                </tr>
+                ${(jeux || []).map((j, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${escapeHtml(j.nom)}</td>
+                        <td>${j.prix_achat ?? "—"}</td>
+                        <td>${escapeHtml(j.notes || "")}</td>
+                        <td>
+                            <form method="POST" action="/jeux-desires/supprimer/${j.id}" onsubmit="return confirm('Supprimer ce jeu désiré ?');">
+                                <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                            </form>
+                        </td>
+                    </tr>
+                `).join("")}
+            </table>
+        </div>
+
+        <br>
+        <a href="/menu">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Jeux désirés", html));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/jeux-desires/ajouter", requireAuth, async (req, res) => {
+    try {
+        const nom = (req.body.nom || "").trim();
+        const notes = (req.body.notes || "").trim() || null;
+        const prix_achat = req.body.prix_achat ? Number(String(req.body.prix_achat).replace(",", ".")) : null;
+
+        if (!nom) {
+            return res.send(renderPage("Erreur", "Le nom du jeu est requis."));
+        }
+
+        const { error } = await supabase
+            .from("jeux_desires")
+            .insert([{
+                nom,
+                prix_achat,
+                notes
+            }]);
+
+        if (error) throw error;
+
+        res.redirect("/jeux-desires");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/jeux-desires/supprimer/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from("jeux_desires")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
+
+        res.redirect("/jeux-desires");
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
