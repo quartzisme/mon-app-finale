@@ -14,6 +14,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
 
+// ===================== BGG seulement =====================
+function normalizeScoreValue(value) {
+    if (value === undefined || value === null || value === "") return null;
+    const normalized = String(value).replace(",", ".");
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+}
+
+function isHalfStep(value) {
+    return Math.abs(value * 2 - Math.round(value * 2)) < 1e-9;
+}
+
 // ===================== Middleware =====================
 app.use(
     session({
@@ -204,6 +216,18 @@ function renderPage(title, content) {
               padding: 10px;
             }
           }
+            .player-card {
+              transition: transform 0.18s ease, box-shadow 0.18s ease;
+              transform-origin: center center;
+              position: relative;
+            }
+
+            .player-card:hover,
+            .player-card.expanded {
+              transform: scale(1.06);
+              z-index: 5;
+              box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+            }
         </style>
     </head>
 
@@ -496,6 +520,7 @@ app.get("/jeux/ajouter", requireAuth, (req, res) => {
     const html = `
         <h2>Ajouter un jeu</h2>
 
+        <div class="result-box">
         <form method="POST" action="/jeux/ajouter" enctype="multipart/form-data">
             Nom:<br>
             <input name="nom" required><br>
@@ -515,14 +540,12 @@ app.get("/jeux/ajouter", requireAuth, (req, res) => {
             Temps max:<br>
             <input type="number" name="temps_max" min="0"><br>
 
-            BGG average rating:<br>
-            <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating"><br>
-
             Image:<br>
             <input type="file" name="image" accept="image/*"><br><br>
 
             <button>Ajouter</button>
         </form>
+       </div>
 
         <a href="/jeux/liste">⬅ Retour</a>
     `;
@@ -722,7 +745,7 @@ app.post("/jeux/supprimer", requireAuth, async (req, res) => {
 // ===================== ROUTES JOUEURS =====================
 app.get("/joueurs/liste", requireAuth, async (req, res) => {
     try {
-        const { data: joueurs, error } = await supabase
+        const { data: joueursBrut, error } = await supabase
             .from("joueurs")
             .select(`
                 *,
@@ -732,6 +755,13 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
         if (error) throw error;
 
+        const joueurs = [...(joueursBrut || [])].sort((a, b) => {
+            const aBGG = String(a.nom || "").trim().toUpperCase() === "BGG";
+            const bBGG = String(b.nom || "").trim().toUpperCase() === "BGG";
+            if (aBGG !== bBGG) return aBGG ? 1 : -1;
+            return String(a.nom || "").localeCompare(String(b.nom || ""), "fr", { sensitivity: "base" });
+        });
+
         const { count: totalJeux, error: totalJeuxError } = await supabase
             .from("jeux")
             .select("*", { count: "exact", head: true });
@@ -740,6 +770,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
         const rows = await Promise.all(
             joueurs.map(async (j) => {
+                const isBGG = String(j.nom || "").trim().toUpperCase() === "BGG";
                 const nbScores = j.scores ? j.scores.length : 0;
                 const pourcentage = totalJeux
                     ? Math.round((nbScores / totalJeux) * 100)
@@ -769,7 +800,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 }
 
                 return `
-                <div class="result-box" style="margin-bottom:15px;">
+                <div class="result-box player-card" style="margin-bottom:15px; cursor:pointer;" onclick="this.classList.toggle('expanded')">
                   <table style="width:100%;">
                     <tr>
                       <td style="width:120px; text-align:center;">
@@ -778,7 +809,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                       </td>
 
                       <td style="text-align:center; width:120px;">
-                        ⭐ ${j.etoiles || 0}<br>
+                        ${isBGG ? "" : `⭐ ${j.etoiles || 0}<br>`}
                       </td>
 
                       <td>
@@ -952,122 +983,175 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
 
         if (jeuxError) throw jeuxError;
 
-        const { data: joueurs, error: joueursError } = await supabase
+        const { data: joueursBrut, error: joueursError } = await supabase
             .from("joueurs")
             .select("id, nom")
             .order("nom");
 
         if (joueursError) throw joueursError;
 
-        const html = `
-        <h2>📊 Ajouter / Modifier un score</h2>
-
-        <div class="result-box">
-        <form method="POST" action="/scores/ajouter">
-          <label>Jeu :</label>
-          <select name="jeu_id" required>
-            <option value="">-- Choisir un jeu --</option>
-            ${jeux.map((j) => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
-          </select><br>
-
-          <label>Joueur :</label>
-          <select name="joueur_id" required>
-            <option value="">-- Choisir un joueur --</option>
-            ${joueurs.map((j) => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
-          </select><br>
-
-          <label>Score :</label>
-          <input type="number" step="0.5" name="score" required><br>
-
-          <button>Ajouter / Modifier</button>
-
-          <div id="scoresJeu" class="result-box" style="display:none;"></div>
-          <div id="scoreJoueur" class="result-box" style="display:none;"></div>
-        </form>
-        </div>        
-
-        <a href="/menu">⬅ Retour</a>
-
-        <script>
-        async function majInfosScore() {
-          const jeu = document.querySelector("[name='jeu_id']").value;
-          const joueur = document.querySelector("[name='joueur_id']").value;
-
-          const divJeu = document.getElementById("scoresJeu");
-          const divJoueur = document.getElementById("scoreJoueur");
-          const inputScore = document.querySelector("[name='score']");
-
-          // ================= SCORES DU JEU =================
-          if (jeu) {
-            try {
-              const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + encodeURIComponent(jeu));
-              const data1 = await res1.json();
-
-              if (!data1 || data1.length === 0) {
-                divJeu.innerHTML = "Aucun score pour ce jeu";
-                divJeu.style.display = "block";
-              } else {
-                divJeu.innerHTML =
-                  "<b>Scores existants :</b><br>" +
-                  data1.map(s => (s.joueurs?.nom || "Joueur inconnu") + " : " + s.score).join("<br>");
-                divJeu.style.display = "block";
-              }
-            } catch (e) {
-              console.log("Erreur scores jeu", e);
-            }
-          } else {
-            divJeu.innerHTML = "";
-            divJeu.style.display = "none";
-          }
-
-          // ================= SCORES DU JOUEUR =================
-          if (joueur) {
-            try {
-              const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + encodeURIComponent(joueur));
-              const dataJ = await resJ.json();
-
-              if (!dataJ || dataJ.length === 0) {
-                divJoueur.style.display = "block";
-                divJoueur.innerHTML = "<b>Ce joueur n'a encore donné aucun score.</b>";
-              } else {
-                divJoueur.style.display = "block";
-                divJoueur.innerHTML =
-                  "<b>Scores de ce joueur :</b><br>" +
-                  dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>");
-              }
-            } catch (e) {
-              console.log("Erreur scores joueur", e);
-            }
-          } else {
-            divJoueur.style.display = "none";
-            divJoueur.innerHTML = "";
-          }
-
-          // ================= SCORE EXISTANT POUR CE COUPLE =================
-          if (jeu && joueur) {
-            try {
-              const resS = await fetch('/api/score-existant?jeu_id=' + encodeURIComponent(jeu) + '&joueur_id=' + encodeURIComponent(joueur));
-              const dataS = await resS.json();
-
-              if (dataS && dataS.score !== undefined && dataS.score !== null) {
-                inputScore.value = dataS.score;
-              } else {
-                inputScore.value = "";
-              }
-            } catch (e) {
-              console.log("Erreur score existant", e);
-            }
-          } else {
-            inputScore.value = "";
-          }
-        }
-
-        document.addEventListener("DOMContentLoaded", () => {
-          document.querySelector("[name='jeu_id']").addEventListener("change", majInfosScore);
-          document.querySelector("[name='joueur_id']").addEventListener("change", majInfosScore);
+        const joueurs = [...(joueursBrut || [])].sort((a, b) => {
+            const aBGG = String(a.nom || "").trim().toUpperCase() === "BGG";
+            const bBGG = String(b.nom || "").trim().toUpperCase() === "BGG";
+            if (aBGG !== bBGG) return aBGG ? 1 : -1;
+            return String(a.nom || "").localeCompare(String(b.nom || ""), "fr", { sensitivity: "base" });
         });
-        </script>
-        `;
+
+        const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
+
+        const html = `
+<h2>📊 Ajouter / Modifier un score</h2>
+
+<form method="POST" action="/scores/ajouter" id="formScore">
+
+<label>Jeu :</label>
+<select name="jeu_id" required>
+<option value="">-- Choisir un jeu --</option>
+${jeux.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+</select><br>
+
+<label>Joueur :</label>
+<select name="joueur_id" required>
+<option value="">-- Choisir un joueur --</option>
+${joueurs.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+</select><br>
+
+<label>Score :</label>
+<input type="number" step="0.5" min="0" max="10" name="score" id="champScore" required><br>
+<div id="aideScore" style="font-size:0.9em; margin-bottom:8px;"></div>
+
+<button>Ajouter / Modifier</button>
+
+<div id="scoresJeu" class="result-box" style="display:none;"></div>
+<div id="scoreJoueur" class="result-box" style="display:none;"></div>
+
+</form>
+
+<a href='/menu'>⬅ Retour</a>
+
+<script>
+const joueursData = ${joueursJson};
+
+function joueurEstBGG(joueurId) {
+  const j = joueursData.find(x => String(x.id) === String(joueurId));
+  return !!j && String(j.nom || "").trim().toUpperCase() === "BGG";
+}
+
+function configurerChampScore() {
+  const joueurId = document.querySelector("[name='joueur_id']").value;
+  const inputScore = document.getElementById("champScore");
+  const aide = document.getElementById("aideScore");
+
+  if (joueurEstBGG(joueurId)) {
+    inputScore.step = "any";
+    inputScore.placeholder = "Ex. 7.6";
+    aide.innerHTML = "BGG : décimales libres autorisées (ex. 7,6 ou 7.6).";
+  } else {
+    inputScore.step = "0.5";
+    inputScore.placeholder = "Ex. 7.5 ou 8";
+    aide.innerHTML = "Joueurs : seulement des valeurs en ,0 ou ,5.";
+  }
+}
+
+async function majInfosScore() {
+  const jeu = document.querySelector("[name='jeu_id']").value;
+  const joueur = document.querySelector("[name='joueur_id']").value;
+
+  const divJeu = document.getElementById("scoresJeu");
+  const divJoueur = document.getElementById("scoreJoueur");
+  const inputScore = document.getElementById("champScore");
+
+  configurerChampScore();
+
+  if (jeu) {
+    try {
+      const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + encodeURIComponent(jeu));
+      const data1 = await res1.json();
+
+      if (!data1 || data1.length === 0) {
+        divJeu.innerHTML = "Aucun score pour ce jeu";
+        divJeu.style.display = "block";
+      } else {
+        divJeu.innerHTML =
+          "<b>Scores existants :</b><br>" +
+          data1.map(s => (s.joueurs?.nom || "Joueur inconnu") + " : " + s.score).join("<br>");
+        divJeu.style.display = "block";
+      }
+    } catch (e) {
+      console.log("Erreur scores jeu", e);
+    }
+  } else {
+    divJeu.innerHTML = "";
+    divJeu.style.display = "none";
+  }
+
+  if (joueur) {
+    try {
+      const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + encodeURIComponent(joueur));
+      const dataJ = await resJ.json();
+
+      if (!dataJ || dataJ.length === 0) {
+        divJoueur.style.display = "block";
+        divJoueur.innerHTML = "<b>Ce joueur n'a encore donné aucun score.</b>";
+      } else {
+        divJoueur.style.display = "block";
+        divJoueur.innerHTML =
+          "<b>Scores de ce joueur :</b><br>" +
+          dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>");
+      }
+    } catch (e) {
+      console.log("Erreur scores joueur", e);
+    }
+  } else {
+    divJoueur.style.display = "none";
+    divJoueur.innerHTML = "";
+  }
+
+  if (jeu && joueur) {
+    try {
+      const resS = await fetch('/api/score-existant?jeu_id=' + encodeURIComponent(jeu) + '&joueur_id=' + encodeURIComponent(joueur));
+      const dataS = await resS.json();
+
+      if (dataS && dataS.score !== undefined && dataS.score !== null) {
+        inputScore.value = dataS.score;
+      } else {
+        inputScore.value = "";
+      }
+    } catch (e) {
+      console.log("Erreur score existant", e);
+    }
+  } else {
+    inputScore.value = "";
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelector("[name='jeu_id']").addEventListener("change", majInfosScore);
+  document.querySelector("[name='joueur_id']").addEventListener("change", majInfosScore);
+  configurerChampScore();
+
+  document.getElementById("formScore").addEventListener("submit", function(e) {
+    const joueurId = document.querySelector("[name='joueur_id']").value;
+    const raw = document.getElementById("champScore").value.replace(",", ".");
+    const n = Number(raw);
+
+    if (!Number.isFinite(n)) {
+      e.preventDefault();
+      alert("Le score est invalide.");
+      return;
+    }
+
+    if (!joueurEstBGG(joueurId)) {
+      const demi = Math.round(n * 2) / 2;
+      if (Math.abs(n - demi) > 1e-9) {
+        e.preventDefault();
+        alert("Pour les joueurs, le score doit être en ,0 ou ,5.");
+      }
+    }
+  });
+});
+</script>
+`;
 
         res.send(renderPage("Ajouter Score", html));
     } catch (err) {
@@ -1099,12 +1183,38 @@ app.get("/api/score-existant", requireAuth, async (req, res) => {
 
 app.post("/scores/ajouter", requireAuth, async (req, res) => {
     try {
-        const { jeu_id, joueur_id, score } = req.body;
+        const { jeu_id, joueur_id } = req.body;
+        const score = normalizeScoreValue(req.body.score);
 
-        const { error } = await supabase.from("scores").upsert(
-            [{ jeu_id, joueur_id, score: Number(score) }],
-            { onConflict: "jeu_id,joueur_id" }
-        );
+        if (!jeu_id || !joueur_id || score === null) {
+            return res.send(renderPage("Erreur", "Données de score invalides."));
+        }
+
+        const { data: joueur, error: joueurError } = await supabase
+            .from("joueurs")
+            .select("id, nom")
+            .eq("id", joueur_id)
+            .single();
+
+        if (joueurError) throw joueurError;
+
+        const estBGG = String(joueur?.nom || "").trim().toUpperCase() === "BGG";
+
+        if (!estBGG && !isHalfStep(score)) {
+            return res.send(
+                renderPage(
+                    "Erreur",
+                    "<h2>Erreur</h2><p>Pour les joueurs, le score doit être en ,0 ou ,5.</p><a href='/scores/ajouter'>⬅ Retour</a>"
+                )
+            );
+        }
+
+        const { error } = await supabase
+            .from("scores")
+            .upsert(
+                [{ jeu_id, joueur_id, score }],
+                { onConflict: "jeu_id,joueur_id" }
+            );
 
         if (error) throw error;
 
@@ -1261,7 +1371,7 @@ app.get("/stats", requireAuth, async (req, res) => {
         if (error) throw error;
 
         const options = joueurs
-            .map((j) => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`)
+            .map((j) => '<option value="' + j.id + '">' + escapeHtml(j.nom) + "</option>")
             .join("");
 
         const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
@@ -1316,18 +1426,24 @@ app.get("/stats", requireAuth, async (req, res) => {
             return;
           }
 
-          divCartes.innerHTML = joueursAAfficher.map(j => \`
-            <div class="result-box" style="margin-bottom:12px;">
-              <table style="width:100%;">
-                <tr>
-                  <td style="width:120px; text-align:center;">
-                    \${j.image ? '<img src="/images/' + encodeURIComponent(j.image) + '" width="80"><br>' : ""}
-                    <strong>\${j.nom}</strong>
-                  </td>
-                </tr>
-              </table>
-            </div>
-          \`).join("");
+          if (selection === "all") {
+            divCartes.innerHTML =
+              "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px;'>" +
+              joueursAAfficher.map(j =>
+                "<div class='result-box' style='flex:1 1 180px; max-width:220px; min-width:150px; margin:0; text-align:center;'>" +
+                  (j.image ? "<img src='/images/" + encodeURIComponent(j.image) + "' width='80'><br>" : "") +
+                  "<strong>" + j.nom + "</strong>" +
+                "</div>"
+              ).join("") +
+              "</div>";
+          } else {
+            const j = joueursAAfficher[0];
+            divCartes.innerHTML =
+              "<div class='result-box' style='margin-bottom:12px; text-align:center; max-width:220px;'>" +
+                (j.image ? "<img src='/images/" + encodeURIComponent(j.image) + "' width='80'><br>" : "") +
+                "<strong>" + j.nom + "</strong>" +
+              "</div>";
+          }
         }
 
         function renderBloc(titre, items, modeLabel) {
@@ -1371,7 +1487,9 @@ app.get("/stats", requireAuth, async (req, res) => {
               return;
             }
 
-            const modeLabel = joueur === "bgg" ? "⬢ BGG" : "⭐ Note";
+            const modeLabel = joueur === "bgg"
+              ? "<span style='color:#1e88e5; font-size:1.15em;'>⬢</span> BGG"
+              : "⭐ Note";
 
             let html = "";
             html += renderBloc("🏆 Meilleurs jeux", data.meilleurs, modeLabel);
@@ -1515,19 +1633,19 @@ app.get("/filtrages", requireAuth, (req, res) => {
         <input type="number" name="tempsmax" min="0" style="width:110px;">
         <label>(minutes)</label><br>
 
-        <label>⭐ Score moyen minimum :</label>
+        <label>⭐ Score moyen minimum des joueurs :</label>
         <input type="number" step="0.1" name="scoremin" min="0" style="width:90px;"><br>
 
-        <label>⬢ Score moyen minimum BGG :</label>
+        <label><span style="color:#1e88e5; font-size:1.2em;">⬢</span> Score moyen minimum BGG :</label>
         <input type="number" step="0.1" name="bggmin" min="0" max="10" style="width:90px;"><br>
 
-        <label>Status :</label><br>
+        <label>ℹ️ Status :</label><br>
         <select name="status" style="width:80px;">
           <option value=""></option>
           <option value="Oui">Oui</option>
         </select><br>
 
-        <label>Extension :</label><br>
+        <label>🔗 Extension :</label><br>
         <select name="extension" style="width:80px;">
           <option value=""></option>
           <option value="Oui">Oui</option>
@@ -1573,63 +1691,34 @@ app.get("/filtrages", requireAuth, (req, res) => {
 
         data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
 
-function txt(v) {
-  return (v === null || v === undefined || v === "") ? "—" : v;
-}
-
-formFiltre.addEventListener("submit", async function(e) {
-  e.preventDefault();
-
-  const params = new URLSearchParams(new FormData(this));
-
-  try {
-    const res = await fetch("/api/filtrer-jeux?" + params.toString());
-    const data = await res.json();
-
-    if (!res.ok) {
-      divResultats.innerHTML = "<div class='result-box'>Erreur : " + (data.error || "Impossible de filtrer") + "</div>";
-      return;
-    }
-
-    if (!Array.isArray(data) || data.length === 0) {
-      divResultats.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
-      return;
-    }
-
-    data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
-
-    divResultats.innerHTML =
-      "<div class='table-wrap'>" +
-        "<table class='jeux-table'>" +
-          "<tr>" +
-            "<th>Nom</th>" +
-            "<th>Joueurs</th>" +
-            "<th>Temps</th>" +
-            "<th>⭐ Local</th>" +
-            "<th>⬢ BGG</th>" +
-            "<th>Status</th>" +
-            "<th>Extension</th>" +
-            "<th>Détails scores</th>" +
-          "</tr>" +
-          data.map(j =>
-            "<tr>" +
-              "<td><b>" + txt(j.nom) + "</b></td>" +
-              "<td>" + txt(j.min_joueurs) + "-" + txt(j.max_joueurs) + "</td>" +
-              "<td>" + txt(j.temps_max) + " min</td>" +
-              "<td>" + txt(j.moyenne) + "</td>" +
-              "<td>" + txt(j.bgg_average_rating) + "</td>" +
-              "<td>" + ((j.statut && j.statut.trim() !== "") ? j.statut : "—") + "</td>" +
-              "<td>" + ((j.extensions && j.extensions.trim() !== "") ? j.extensions : "—") + "</td>" +
-              "<td>" + (j.joueurs?.length ? j.joueurs.join("<br>") : "—") + "</td>" +
-            "</tr>"
-          ).join("") +
-        "</table>" +
-      "</div>";
-  } catch (err) {
-    divResultats.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
-  }
-});
-        } catch (err) {
+        divResultats.innerHTML =
+          "<div class='table-wrap'>" +
+            "<table class='jeux-table'>" +
+              "<tr>" +
+                "<th>⚔️ Jeux</th>" +
+                "<th>👥 Joueurs</th>" +
+                "<th>⌛ Temps</th>" +
+                "<th>⭐ Local</th>" +
+                "<th><span style='color:#1e88e5; font-size:1.25em;'>⬢</span> BGG</th>" +
+                "<th>ℹ️ Status</th>" +
+                "<th>🔗 Extension</th>" +
+                "<th>⭐ Scores</th>" +
+              "</tr>" +
+              data.map(j =>
+                "<tr>" +
+                  "<td><b>" + txt(j.nom) + "</b></td>" +
+                  "<td>" + txt(j.min_joueurs) + "-" + txt(j.max_joueurs) + "</td>" +
+                  "<td>" + txt(j.temps_max) + " min</td>" +
+                  "<td>" + txt(j.moyenne) + "</td>" +
+                  "<td>" + txt(j.bgg_average_rating) + "</td>" +
+                  "<td>" + ((j.statut && j.statut.trim() !== "") ? j.statut : "—") + "</td>" +
+                  "<td>" + ((j.extensions && j.extensions.trim() !== "") ? j.extensions : "—") + "</td>" +
+                  "<td>" + (j.joueurs?.length ? j.joueurs.join("<br>") : "—") + "</td>" +
+                "</tr>"
+              ).join("") +
+            "</table>" +
+          "</div>";
+      } catch (err) {
         divResultats.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
       }
     });
