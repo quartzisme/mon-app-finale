@@ -109,6 +109,21 @@ function renderPage(title, content) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${escapeHtml(title)}</title>
         <style>
+          .menu-item a {
+            display: block;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: white;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+          }
+
+          .menu-item a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+            background: #f7fbff;
+          }
+
           body {
             font-size: 20px;
             line-height: 1.6;
@@ -391,8 +406,7 @@ app.get("/", (req, res) => {
     </style>
 
     <div class="login-wrapper">
-      <img src="/images/de.jpg" class="login-image" alt="Logo"><br>
-      aide.innerHTML = "Version 1b";
+      <img src="/images/de.jpg" class="login-image" alt="Logo">v1.d<br>
 
       <form method="POST" action="/login" class="login-form">
         <input name="username" placeholder="Usager" required><br>
@@ -432,15 +446,15 @@ app.get("/menu", requireAuth, (req, res) => {
       <div class="result-box">
         <ul style="list-style:none; padding-left:0;">
           <div style="display:flex; flex-direction:column; gap:12px; max-width:320px;">
-            <li><a href="/jeux/liste">⚔️ Jeux</a></li>
-            <li><a href="/joueurs/liste">👥 Joueurs</a></li>
-            <li><a href="/scores/ajouter">📊 Inscription des Scores</a></li>
-            <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
-            <li><a href="/filtrages">🔍 Filtrages</a></li>
-            <li><a href="/competitions/liste">🏆 Compétitions</a></li>
-            <li><a href="/jeux-en-cours">⏸️ Jeux en cours</a></li>
-            <li><a href="/jeux-desires">🛒 Jeux désirés</a></li>
-            <li><a href="/logout">⏻ Déconnexion</a></li>
+            <li class="menu-item"><a href="/jeux/liste">⚔️ Jeux</a></li>
+            <li class="menu-item"><a href="/joueurs/liste">👥 Joueurs</a></li>
+            <li class="menu-item"><a href="/scores/ajouter">📊 Inscription des Scores</a></li>
+            <li class="menu-item"><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
+            <li class="menu-item"><a href="/filtrages">🔍 Filtrages</a></li>
+            <li class="menu-item"><a href="/competitions/liste">🏆 Compétitions</a></li>
+            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours</a></li>
+            <li class="menu-item"><a href="/jeux-desires">🛒 Jeux désirés</a></li>
+            <li class="menu-item"><a href="/logout">⏻ Déconnexion</a></li>
           </div>
         </ul>
       </div>
@@ -494,7 +508,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         <a href="/menu">⬅ Retour</a><br><br>
       <div class="table-wrap">
         <table class="jeux-table">
-          <tr data-jeu="${escapeHtml((j.nom || "") + " " + (j.extensions || "") + " " + (j.statut || ""))}">        
+          <tr data-jeu="${escapeHtml((j.nom || "") + " " + (j.extensions || "") + " " + (j.statut || ""))}">
             <th>#</th>
             <th>Nom</th>
             <th>Extensions</th>
@@ -744,53 +758,6 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
         `;
 
         res.send(renderPage("Modifier jeu", html));
-    } catch (err) {
-        res.send(renderPage("Erreur", err.message));
-    }
-});
-
-app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) => {
-    try {
-        const {
-            nom,
-            extensions,
-            min_joueurs,
-            max_joueurs,
-            temps_min,
-            temps_max,
-            bgg_average_rating
-        } = req.body;
-
-        let image = null;
-
-        if (req.file) {
-            const inputPath = req.file.path;
-            const outputName = "jeu_" + safeFileBaseName(nom || "image") + ".jpg";
-            const outputPath = path.join("public/images", outputName);
-
-            await sharp(inputPath)
-                .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
-                .jpeg({ quality: 82 })
-                .toFile(outputPath);
-
-            await fs.unlink(inputPath);
-            image = outputName;
-        }
-
-        const { error } = await supabase.from("jeux").insert([{
-            nom: nom?.trim(),
-            extensions: extensions?.trim() || null,
-            min_joueurs: toIntOrNull(min_joueurs),
-            max_joueurs: toIntOrNull(max_joueurs),
-            temps_min: toIntOrNull(temps_min),
-            temps_max: toIntOrNull(temps_max),
-            bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null,
-            image
-        }]);
-
-        if (error) throw error;
-
-        res.redirect("/jeux/liste");
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
@@ -1529,7 +1496,7 @@ app.get("/stats", requireAuth, async (req, res) => {
             .map((j) => '<option value="' + j.id + '">' + escapeHtml(j.nom) + "</option>")
             .join("");
 
-        const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
+        const joueursJson = JSON.stringify(joueursBrut || []).replace(/</g, "\\u003c");
 
         const html = `
         <h2>🥇 Top jeux 💀</h2>
@@ -1595,7 +1562,8 @@ app.get("/stats", requireAuth, async (req, res) => {
         }
 
         function renderBloc(titre, items, modeLabel) {
-          let html = "<div class='result-box'><h3>" + titre + "</h3>";
+          const couleurTitre = titre.includes("Meilleurs") ? "#1b8f3a" : "#c62828";
+          let html = "<div class='result-box'><h3 style='color:" + couleurTitre + ";'>" + titre + "</h3>";
 
           if (!items || items.length === 0) {
             html += "Aucune donnée";
@@ -2465,12 +2433,23 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
 
         if (partiesError) throw partiesError;
 
-        const { data: joueurs, error: joueursError } = await supabase
+        const { data: jeux, error: jeuxError } = await supabase
+            .from("jeux")
+            .select("id, nom")
+            .order("nom");
+
+        if (jeuxError) throw jeuxError;
+
+        const { data: joueursBrut, error: joueursError } = await supabase
             .from("joueurs")
             .select("id, nom")
             .order("nom");
 
         if (joueursError) throw joueursError;
+
+        const joueurs = (joueursBrut || []).filter(
+            j => String(j.nom || "").trim().toUpperCase() !== "BGG"
+        );
 
         const { data: liens, error: liensError } = await supabase
             .from("jeux_en_cours_joueurs")
@@ -2493,11 +2472,14 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
 
         <div class="result-box">
             <form method="POST" action="/jeux-en-cours/ajouter" enctype="multipart/form-data">
-                Nom du jeu:<br>
-                <input name="nom_jeu" required><br>
+                Jeu:<br>
+                <select name="nom_jeu" required>
+                    <option value="">-- Choisir un jeu --</option>
+                    ${(jeux || []).map(j => `<option value="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br>
 
                 Joueurs impliqués:<br>
-                <select name="joueur_ids" multiple size="6" style="max-width:400px;">
+                <select name="joueur_ids[]" multiple size="6" style="max-width:400px;" required>
                     ${(joueurs || []).map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
                 </select><br>
 
@@ -2557,7 +2539,7 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
         const nom_jeu = (req.body.nom_jeu || "").trim();
         const notes = (req.body.notes || "").trim() || null;
 
-        let joueur_ids = req.body.joueur_ids || [];
+        let joueur_ids = req.body["joueur_ids[]"] || req.body.joueur_ids || [];
         if (!Array.isArray(joueur_ids)) joueur_ids = [joueur_ids];
         joueur_ids = joueur_ids.map(id => Number(id)).filter(id => !Number.isNaN(id));
 
