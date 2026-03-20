@@ -336,7 +336,46 @@ function renderPage(title, content) {
             .zoomed-card-wrap .player-card:hover {
               transform: scale(1.28);
               box-shadow: 0 12px 24px rgba(0,0,0,0.22);
-            }          
+            }
+            .joueur-mini-carte {
+              display: inline-block;
+              text-align: center;
+              padding: 10px;
+              border-radius: 12px;
+              background: #f8fbff;
+              box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+              transition: transform 0.18s ease, box-shadow 0.18s ease;
+              cursor: pointer;
+              min-width: 100px;
+            }
+
+            .joueur-mini-carte:hover {
+              transform: scale(1.06);
+              box-shadow: 0 10px 20px rgba(0,0,0,0.18);
+            }
+
+            .zoomed-player-card {
+              text-align: center;
+              padding: 18px;
+              border-radius: 18px;
+              background: #f8fbff;
+              box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+              width: min(320px, 90vw);
+              margin: 0 auto;
+            }
+
+            .zoomed-player-card img {
+              max-width: 220px;
+              width: 100%;
+              height: auto;
+              border-radius: 12px;
+            }
+
+            .zoomed-player-card .nom {
+              font-size: 1.25em;
+              font-weight: bold;
+              margin-top: 10px;
+            }                        
         </style>
     </head>
 
@@ -983,7 +1022,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         if (totalJeuxError) throw totalJeuxError;
 
         const rows = await Promise.all(
-            joueurs.map(async (j, index) => {
+            joueurs.map(async (j) => {
                 const isBGG = String(j.nom || "").trim().toUpperCase() === "BGG";
                 const nbScores = j.scores ? j.scores.length : 0;
                 const pourcentage = totalJeux
@@ -1013,33 +1052,40 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                     bestJeuHTML = meilleurs.join(", ");
                 }
 
+                const imageSrc = j.image ? `/images/${encodeURIComponent(j.image)}` : "";
+                const nomSafe = escapeHtml(j.nom || "");
+                const etoilesTexte = isBGG ? "" : `⭐ ${j.etoiles || 0}`;
+
                 return `
-                <div class="result-box player-card" id="player-card-${index}" onclick="ouvrirZoomJoueur('player-card-${index}')">
+                <div class="result-box" style="margin-bottom:15px;">
                   <table style="width:100%;">
                     <tr>
-                      <td style="width:120px; text-align:center;">
-                        ${j.image ? `<img src="/images/${encodeURIComponent(j.image)}" width="80"><br>` : ""}
-                        <strong>${escapeHtml(j.nom)}</strong>
+                      <td style="width:150px; text-align:center; vertical-align:top;">
+                        <div class="joueur-mini-carte"
+                             onclick="ouvrirZoomCarteJoueur(this)"
+                             data-image="${imageSrc}"
+                             data-nom="${nomSafe}"
+                             data-etoiles="${escapeHtml(etoilesTexte)}">
+                          ${j.image ? `<img src="${imageSrc}" width="80"><br>` : ""}
+                          <strong>${nomSafe}</strong><br>
+                          ${isBGG ? "" : `⭐ ${j.etoiles || 0}`}
+                        </div>
                       </td>
 
-                      <td style="text-align:center; width:120px;">
-                        ${isBGG ? "" : `⭐ ${j.etoiles || 0}<br>`}
-                      </td>
-
-                      <td>
+                      <td style="vertical-align:top;">
                         <b>🧩 Jeux évalués :</b> ${nbScores} (${pourcentage}%)
                         <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
                         <br>
 
-                      <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form" onsubmit="event.stopPropagation()">
-                        <button type="submit" style="width:auto;">✏ Modifier</button>
-                      </form>
-                      &nbsp;
+                        <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form">
+                          <button type="submit" style="width:auto;">✏ Modifier</button>
+                        </form>
+                        &nbsp;
 
-                      <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="event.stopPropagation(); return confirm('Supprimer ce joueur ?');">
-                        <button type="submit" style="width:auto;">🗑 Supprimer</button>
-                      </form>
-                        </td>
+                        <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur ?');">
+                          <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                        </form>
+                      </td>
                     </tr>
                   </table>
                 </div>
@@ -1059,18 +1105,21 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         </div>
 
         <script>
-        function ouvrirZoomJoueur(cardId) {
-          const card = document.getElementById(cardId);
+        function ouvrirZoomCarteJoueur(el) {
           const overlay = document.getElementById("zoomOverlay");
           const box = document.getElementById("zoomBox");
+          if (!overlay || !box || !el) return;
 
-          if (!card || !overlay || !box) return;
+          const image = el.dataset.image || "";
+          const nom = el.dataset.nom || "";
+          const etoiles = el.dataset.etoiles || "";
 
-          const clone = card.cloneNode(true);
-          clone.removeAttribute("onclick");
-
-          box.innerHTML = "<div class='zoomed-card-wrap'></div>";
-          box.querySelector(".zoomed-card-wrap").appendChild(clone);
+          box.innerHTML =
+            "<div class='zoomed-player-card'>" +
+              (image ? "<img src='" + image + "' alt='Carte joueur'><br>" : "") +
+              "<div class='nom'>" + nom + "</div>" +
+              (etoiles ? "<div style='margin-top:8px; font-size:1.1em;'>" + etoiles + "</div>" : "") +
+            "</div>";
 
           overlay.classList.add("show");
         }
@@ -1907,120 +1956,153 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 });
 
 // ===================== FILTRAGES =====================
-app.get("/filtrages", requireAuth, (req, res) => {
-    const html = `
-    <h2>🔍 Filtrer les jeux</h2>
+app.get("/filtrages", requireAuth, async (req, res) => {
+    try {
+        const { data: jeuxSuggestion, error: suggestionError } = await supabase
+            .from("jeux")
+            .select("nom, image")
+            .order("nom");
 
-    <div class="result-box">
-      <form id="formFiltre">
-        <label>👤 Joueurs minimum :</label>
-        <input type="number" name="minj" min="0" style="width:90px;"><br>
+        if (suggestionError) throw suggestionError;
 
-        <label>👥 Joueurs maximum :</label>
-        <input type="number" name="maxj" min="0" style="width:90px;"><br>
+        const listeSuggestions = jeuxSuggestion || [];
+        const suggestion = listeSuggestions.length
+            ? listeSuggestions[Math.floor(Math.random() * listeSuggestions.length)]
+            : null;
 
-        <label>⌛ Temps maximum :</label>
-        <input type="number" name="tempsmax" min="0" style="width:110px;">
-        <label>(minutes)</label><br>
+        const suggestionHtml = suggestion
+            ? `
+            <div class="result-box">
+              <h3>🎲 Suggestion du moment</h3>
+              <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                ${suggestion.image ? `<img src="/images/${encodeURIComponent(suggestion.image)}" width="90">` : ""}
+                <div>
+                  <div style="font-size:1.1em;"><b>${escapeHtml(suggestion.nom)}</b></div>
+                  <div style="color:#666;">Pourquoi pas celui-là ?</div>
+                </div>
+              </div>
+            </div>
+            `
+            : "";
 
-        <label>⭐ Score moyen minimum des joueurs :</label>
-        <input type="number" step="0.1" name="scoremin" min="0" style="width:90px;"><br>
+        const html = `
+        <h2>🔍 Filtrer les jeux</h2>
 
-        <label><span style="color:#1e88e5; font-size:1.2em;">⬢</span> Score moyen minimum BGG :</label>
-        <input type="number" step="0.1" name="bggmin" min="0" max="10" style="width:90px;"><br>
+        ${suggestionHtml}
 
-        <label>ℹ️ Status :</label><br>
-        <select name="status" style="width:80px;">
-          <option value=""></option>
-          <option value="Oui">Oui</option>
-        </select><br>
+        <div class="result-box">
+          <form id="formFiltre">
+            <label>👤 Joueurs minimum :</label>
+            <input type="number" name="minj" min="0" style="width:90px;"><br>
 
-        <label>🔗 Extension :</label><br>
-        <select name="extension" style="width:80px;">
-          <option value=""></option>
-          <option value="Oui">Oui</option>
-        </select>
-        <br><br>
+            <label>👥 Joueurs maximum :</label>
+            <input type="number" name="maxj" min="0" style="width:90px;"><br>
 
-        <button type="submit" style="width:auto;">Rechercher</button>
-        <button type="button" id="btnVider" style="width:auto; margin-left:8px;">Vider</button>
-      </form>
-    </div>
+            <label>⌛ Temps maximum :</label>
+            <input type="number" name="tempsmax" min="0" style="width:110px;">
+            <label>(minutes)</label><br>
 
-    <div id="resultatsFiltre"></div>
+            <label>⭐ Score moyen minimum des joueurs :</label>
+            <input type="number" step="0.1" name="scoremin" min="0" style="width:90px;"><br>
 
-    <a href="/menu">⬅ Retour</a>
+            <label><span style="color:#1e88e5; font-size:1.2em;">⬢</span> Score moyen minimum BGG :</label>
+            <input type="number" step="0.1" name="bggmin" min="0" max="10" style="width:90px;"><br>
 
-    <script>
-    const formFiltre = document.getElementById("formFiltre");
-    const divResultats = document.getElementById("resultatsFiltre");
-    const btnVider = document.getElementById("btnVider");
+            <label>ℹ️ Status :</label><br>
+            <select name="status" style="width:80px;">
+              <option value=""></option>
+              <option value="Oui">Oui</option>
+            </select><br>
 
-    function txt(v) {
-      return (v === null || v === undefined || v === "") ? "—" : v;
+            <label>🔗 Extension :</label><br>
+            <select name="extension" style="width:80px;">
+              <option value=""></option>
+              <option value="Oui">Oui</option>
+            </select>
+            <br><br>
+
+            <button type="submit" style="width:auto;">Rechercher</button>
+            <button type="button" id="btnVider" style="width:auto; margin-left:8px;">Vider</button>
+          </form>
+        </div>
+
+        <div id="resultatsFiltre"></div>
+
+        <a href="/menu">⬅ Retour</a>
+
+        <script>
+        const formFiltre = document.getElementById("formFiltre");
+        const divResultats = document.getElementById("resultatsFiltre");
+        const btnVider = document.getElementById("btnVider");
+
+        function txt(v) {
+          return (v === null || v === undefined || v === "") ? "—" : v;
+        }
+
+        formFiltre.addEventListener("submit", async function(e) {
+          e.preventDefault();
+
+          const params = new URLSearchParams(new FormData(this));
+
+          try {
+            const res = await fetch("/api/filtrer-jeux?" + params.toString());
+            const data = await res.json();
+
+            if (!res.ok) {
+              divResultats.innerHTML = "<div class='result-box'>Erreur : " + (data.error || "Impossible de filtrer") + "</div>";
+              return;
+            }
+
+            if (!Array.isArray(data) || data.length === 0) {
+              divResultats.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
+              return;
+            }
+
+            data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
+
+            divResultats.innerHTML =
+              "<div class='table-wrap'>" +
+                "<table class='jeux-table'>" +
+                  "<tr>" +
+                    "<th>⚔️ Jeux</th>" +
+                    "<th>👥 Joueurs</th>" +
+                    "<th>⌛ Temps</th>" +
+                    "<th>⭐ Local</th>" +
+                    "<th><span style='color:#1e88e5; font-size:1.25em;'>⬢</span> BGG</th>" +
+                    "<th>ℹ️ Status</th>" +
+                    "<th>🔗 Extension</th>" +
+                    "<th>⭐ Scores</th>" +
+                  "</tr>" +
+                  data.map(j =>
+                    "<tr>" +
+                      "<td><b>" + txt(j.nom) + "</b></td>" +
+                      "<td>" + txt(j.min_joueurs) + "-" + txt(j.max_joueurs) + "</td>" +
+                      "<td>" + txt(j.temps_max) + " min</td>" +
+                      "<td>" + txt(j.moyenne) + "</td>" +
+                      "<td>" + txt(j.bgg_average_rating) + "</td>" +
+                      "<td>" + ((j.statut && j.statut.trim() !== "") ? j.statut : "—") + "</td>" +
+                      "<td>" + ((j.extensions && j.extensions.trim() !== "") ? j.extensions : "—") + "</td>" +
+                      "<td>" + (j.joueurs?.length ? j.joueurs.join("<br>") : "—") + "</td>" +
+                    "</tr>"
+                  ).join("") +
+                "</table>" +
+              "</div>";
+          } catch (err) {
+            divResultats.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
+          }
+        });
+
+        btnVider.addEventListener("click", () => {
+          formFiltre.reset();
+          divResultats.innerHTML = "";
+        });
+        </script>
+        `;
+
+        res.send(renderPage("Filtrages", html));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
     }
-
-    formFiltre.addEventListener("submit", async function(e) {
-      e.preventDefault();
-
-      const params = new URLSearchParams(new FormData(this));
-
-      try {
-        const res = await fetch("/api/filtrer-jeux?" + params.toString());
-        const data = await res.json();
-
-        if (!res.ok) {
-          divResultats.innerHTML = "<div class='result-box'>Erreur : " + (data.error || "Impossible de filtrer") + "</div>";
-          return;
-        }
-
-        if (!Array.isArray(data) || data.length === 0) {
-          divResultats.innerHTML = "<div class='result-box'>Aucun jeu trouvé</div>";
-          return;
-        }
-
-        data.sort((a, b) => (b.moyenne ?? 0) - (a.moyenne ?? 0));
-
-        divResultats.innerHTML =
-          "<div class='table-wrap'>" +
-            "<table class='jeux-table'>" +
-              "<tr>" +
-                "<th>⚔️ Jeux</th>" +
-                "<th>👥 Joueurs</th>" +
-                "<th>⌛ Temps</th>" +
-                "<th>⭐ Local</th>" +
-                "<th><span style='color:#1e88e5; font-size:1.25em;'>⬢</span> BGG</th>" +
-                "<th>ℹ️ Status</th>" +
-                "<th>🔗 Extension</th>" +
-                "<th>⭐ Scores</th>" +
-              "</tr>" +
-              data.map(j =>
-                "<tr>" +
-                  "<td><b>" + txt(j.nom) + "</b></td>" +
-                  "<td>" + txt(j.min_joueurs) + "-" + txt(j.max_joueurs) + "</td>" +
-                  "<td>" + txt(j.temps_max) + " min</td>" +
-                  "<td>" + txt(j.moyenne) + "</td>" +
-                  "<td>" + txt(j.bgg_average_rating) + "</td>" +
-                  "<td>" + ((j.statut && j.statut.trim() !== "") ? j.statut : "—") + "</td>" +
-                  "<td>" + ((j.extensions && j.extensions.trim() !== "") ? j.extensions : "—") + "</td>" +
-                  "<td>" + (j.joueurs?.length ? j.joueurs.join("<br>") : "—") + "</td>" +
-                "</tr>"
-              ).join("") +
-            "</table>" +
-          "</div>";
-      } catch (err) {
-        divResultats.innerHTML = "<div class='result-box'>Erreur JavaScript : " + err.message + "</div>";
-      }
-    });
-
-    btnVider.addEventListener("click", () => {
-      formFiltre.reset();
-      divResultats.innerHTML = "";
-    });
-    </script>
-    `;
-
-    res.send(renderPage("Filtrages", html));
 });
 
 // ===================== ROUTES COMPÉTITIONS =====================
@@ -2768,7 +2850,8 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 <input name="nom" required><br>
 
                 Prix d'achat:<br>
-                <input type="number" name="prix_achat" min="0" step="0.01">$ + Taxes<br>
+                <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="20.00"><br>
+                <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div>
 
                 Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
