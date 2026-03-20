@@ -486,12 +486,14 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
             .select(`
                 id,
                 nom,
+                image,
                 extensions,
                 min_joueurs,
                 max_joueurs,
                 temps_min,
                 temps_max,
                 statut,
+                bgg_average_rating,
                 scores(score)
             `)
             .order("nom");
@@ -502,24 +504,28 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         <h2>⚔️ Liste des jeux</h2>
 
         <button onclick="window.location.href='/jeux/ajouter'">Ajouter un jeu</button><br>
-        <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br>
+        <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br><br>
+
         <input id="rechercheJeu" placeholder="Rechercher un jeu..." style="max-width:300px;"><br><br>
-        
+
         <a href="/menu">⬅ Retour</a><br><br>
-      <div class="table-wrap">
-        <table class="jeux-table">
-          <tr data-jeu="${escapeHtml((j.nom || "") + " " + (j.extensions || "") + " " + (j.statut || ""))}">
-            <th>#</th>
-            <th>Nom</th>
-            <th>Extensions</th>
-            <th>Joueurs</th>
-            <th>Temps</th>
-            <th>Statut</th>
-            <th>Moyenne</th>
-          </tr>
+
+        <div class="table-wrap">
+          <table class="jeux-table">
+            <tr>
+              <th>#</th>
+              <th>Image</th>
+              <th>Nom</th>
+              <th>Extensions</th>
+              <th>Joueurs</th>
+              <th>Temps</th>
+              <th>Statut</th>
+              <th>⬢ BGG</th>
+              <th>⭐ Moyenne</th>
+            </tr>
         `;
 
-          jeux.forEach((j, index) => {
+        (jeux || []).forEach((j, index) => {
             let moyenne = "—";
 
             if (j.scores && j.scores.length > 0) {
@@ -530,35 +536,56 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
             }
 
             html += `
-            <tr>
+            <tr data-jeu="${escapeHtml(
+                (j.nom || "") + " " +
+                (j.extensions || "") + " " +
+                (j.statut || "")
+            )}">
               <td>${index + 1}</td>
-              <td>${escapeHtml(j.nom)}</td>
-              <td>${escapeHtml(j.extensions || "")}</td>
+              <td>${
+                  j.image
+                      ? `<img src="/images/${encodeURIComponent(j.image)}" width="55">`
+                      : "—"
+              }</td>
+              <td><b>${escapeHtml(j.nom || "")}</b></td>
+              <td>${escapeHtml(j.extensions || "") || "—"}</td>
               <td>${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
               <td>${j.temps_min ?? "—"}-${j.temps_max ?? "—"} min</td>
-              <td>${escapeHtml(j.statut || "")}</td>
+              <td>${escapeHtml(j.statut || "") || "—"}</td>
+              <td>${
+                  j.bgg_average_rating !== null && j.bgg_average_rating !== undefined
+                      ? `<span style="color:#1e88e5; font-size:1.15em;">⬢</span> ${j.bgg_average_rating}`
+                      : "—"
+              }</td>
               <td><strong>${moyenne}</strong></td>
             </tr>
             `;
         });
 
-      html += `</table></div><br><a href="/menu">⬅ Retour</a>`;
-      html += `
-      <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        const champ = document.getElementById("rechercheJeu");
-        if (!champ) return;
+        html += `
+          </table>
+        </div>
 
-        champ.addEventListener("input", () => {
-          const q = champ.value.toLowerCase().trim();
-          document.querySelectorAll(".jeux-table tr[data-jeu]").forEach(row => {
-            const txt = row.getAttribute("data-jeu").toLowerCase();
-            row.style.display = txt.includes(q) ? "" : "none";
+        <br>
+        <a href="/menu">⬅ Retour</a>
+
+        <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          const champ = document.getElementById("rechercheJeu");
+          if (!champ) return;
+
+          champ.addEventListener("input", () => {
+            const q = champ.value.toLowerCase().trim();
+
+            document.querySelectorAll(".jeux-table tr[data-jeu]").forEach(row => {
+              const txt = (row.getAttribute("data-jeu") || "").toLowerCase();
+              row.style.display = txt.includes(q) ? "" : "none";
+            });
           });
         });
-      });
-      </script>
-      `;
+        </script>
+        `;
+
         res.send(renderPage("Liste des jeux", html));
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
@@ -882,13 +909,15 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
                         <br>
 
-                        <a href="/joueurs/modifier/${j.id}" onclick="event.stopPropagation()">✏ Modifier</a>
-                        &nbsp;|&nbsp;
+                      <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form" onsubmit="event.stopPropagation()">
+                        <button type="submit" style="width:auto;">✏ Modifier</button>
+                      </form>
+                      &nbsp;
 
-                        <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="event.stopPropagation(); return confirm('Supprimer ce joueur ?');">
-                          <button type="submit" style="width:auto;">🗑 Supprimer</button>
-                        </form>
-                      </td>
+                      <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="event.stopPropagation(); return confirm('Supprimer ce joueur ?');">
+                        <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                      </form>
+                        </td>
                     </tr>
                   </table>
                 </div>
@@ -1506,7 +1535,7 @@ app.get("/stats", requireAuth, async (req, res) => {
         <select name="joueur" id="choixJoueur">
           <option value="">-- Choisir --</option>
           <option value="all">Tous les joueurs</option>
-          <option value="all_with_bgg">Tous les joueurs avec BGG</option>
+          <option value="all_with_bgg">Tous les joueurs + BGG</option>
           <option value="bgg">BGG</option>
           ${joueursSansBGG.map(j => '<option value="' + j.id + '">' + escapeHtml(j.nom) + '</option>').join("")}
         </select>
