@@ -378,14 +378,14 @@ app.get("/", (req, res) => {
     </style>
 
     <div class="login-wrapper">
-      <img src="/images/de.jpg" class="login-image" alt="Logo">
+      <img src="/images/de.jpg" class="login-image" alt="Logo">version 1b<br>
 
       <form method="POST" action="/login" class="login-form">
         <input name="username" placeholder="Usager" required><br>
 
         <div class="password-wrap">
           <input type="password" id="password" name="password" placeholder="Mot de passe" required>
-          <button type="button" id="toggle-eye" class="password-toggle" onclick="togglePassword()" aria-label="Afficher ou masquer le mot de passe">👁</button>
+          <button type="button" id="toggle-eye" class="password-toggle" onclick="togglePassword()" aria-label="Afficher ou masquer le mot de passe">👀</button>
         </div>
 
         <br>
@@ -1082,9 +1082,10 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
 
         const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
 
-        const html = `
+const html = `
 <h2>📊 Ajouter / Modifier un score</h2>
 
+<div class="result-box">
 <form method="POST" action="/scores/ajouter" id="formScore">
 
 <label>Jeu :</label>
@@ -1101,7 +1102,7 @@ ${joueurs.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join
 
 <label>Score :</label>
 <input type="number" step="0.5" min="0" max="10" name="score" id="champScore" required><br>
-<div id="aideScore" style="font-size:0.9em; margin-bottom:8px;"></div>
+<div id="aideScore" style="font-size:0.72em; color:#666; line-height:1.2; margin:2px 0 10px 2px; font-style:italic; opacity:0.95;"></div>
 
 <button>Ajouter / Modifier</button>
 
@@ -1109,6 +1110,7 @@ ${joueurs.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join
 <div id="scoreJoueur" class="result-box" style="display:none;"></div>
 
 </form>
+</div>
 
 <a href='/menu'>⬅ Retour</a>
 
@@ -1446,12 +1448,16 @@ app.get("/api/filtrer-jeux", requireAuth, async (req, res) => {
 // ===================== MEILLEURS / PIRES JEUX =====================
 app.get("/stats", requireAuth, async (req, res) => {
     try {
-        const { data: joueurs, error } = await supabase
+        const { data: joueursBrut, error } = await supabase
             .from("joueurs")
             .select("id, nom, image")
             .order("nom");
 
         if (error) throw error;
+
+        const joueurs = (joueursBrut || []).filter(
+            j => String(j.nom || "").trim().toUpperCase() !== "BGG"
+        );
 
         const options = joueurs
             .map((j) => '<option value="' + j.id + '">' + escapeHtml(j.nom) + "</option>")
@@ -1474,9 +1480,6 @@ app.get("/stats", requireAuth, async (req, res) => {
 
           Nombre de jeux à afficher:<br>
           <input type="number" id="nbTop" value="5" min="1" max="50" style="width:90px;">
-          <br>
-
-          <button type="button" onclick="chargerStats()" style="width:150px;">🔄 Rafraîchir</button>
         </form>
 
         <div id="carte-joueur"></div>
@@ -1535,12 +1538,12 @@ app.get("/stats", requireAuth, async (req, res) => {
           if (!items || items.length === 0) {
             html += "Aucune donnée";
           } else {
-            items.forEach(j => {
+            items.forEach((j, idx) => {
               html += "<div style='display:flex; align-items:center; gap:12px; margin:10px 0;'>";
               if (j.image) {
                 html += "<img src='/images/" + encodeURIComponent(j.image) + "' width='55'>";
               }
-              html += "<div><b>" + j.jeu + "</b><br>" + modeLabel + " : " + Number(j.moyenne).toFixed(2) + "</div>";
+              html += "<div><b>#"+ (idx + 1) +" — " + j.jeu + "</b><br>" + modeLabel + " : " + Number(j.moyenne).toFixed(2) + "</div>";
               html += "</div>";
             });
           }
@@ -1637,6 +1640,9 @@ app.get("/api/stats", requireAuth, async (req, res) => {
                     id,
                     nom,
                     image
+                ),
+                joueurs (
+                    nom
                 )
             `);
 
@@ -1647,7 +1653,15 @@ app.get("/api/stats", requireAuth, async (req, res) => {
         const { data: scores, error } = await query;
         if (error) throw error;
 
-        if (!scores || !scores.length) {
+        let scoresFiltres = scores || [];
+
+        if (joueur === "all") {
+            scoresFiltres = scoresFiltres.filter(
+                s => String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
+            );
+        }
+
+        if (!scoresFiltres.length) {
             return res.json({ meilleurs: [], pires: [] });
         }
 
@@ -1656,7 +1670,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
         if (joueur === "all") {
             const stats = {};
 
-            scores.forEach((s) => {
+            scoresFiltres.forEach((s) => {
                 const jeu = s.jeux;
                 if (!jeu?.nom) return;
 
@@ -1679,7 +1693,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
                 moyenne: j.total / j.count
             }));
         } else {
-            resultats = (scores || [])
+            resultats = scoresFiltres
                 .filter(s => s.jeux?.nom)
                 .map(s => ({
                     jeu: s.jeux.nom,
@@ -2395,7 +2409,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 <input name="nom" required><br>
 
                 Prix d'achat:<br>
-                <input type="number" name="prix_achat" min="0" step="0.01"><br>
+                <input type="number" name="prix_achat" min="0" step="0.01">$ + Taxes<br>
 
                 Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
