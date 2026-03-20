@@ -1717,8 +1717,6 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
         let scoresFiltres = scores || [];
 
-        let scoresFiltres = scores || [];
-
         if (joueur === "all") {
           scoresFiltres = scoresFiltres.filter(
             s => String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
