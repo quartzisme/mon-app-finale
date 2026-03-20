@@ -40,7 +40,7 @@ app.use(
     })
 );
 // ===================== app standalone =====================
-app.use(express.static(join(__dirname, "public")));
+app.use(express.static(join(__dirname, "public"), { index: false }));
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
