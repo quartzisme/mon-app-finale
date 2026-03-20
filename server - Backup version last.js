@@ -79,21 +79,12 @@ function safeFileBaseName(value = "image") {
         .replace(/^_+|_+$/g, "") || "image";
 }
 
-function formatPrixCAD(value) {
-    if (value === undefined || value === null || value === "") return "—";
-    return Number(value).toLocaleString("fr-CA", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }) + " $";
-}
-
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, "public/images"),
     filename: (req, file, cb) => {
-        const baseRaw = req.body.nom || req.body.nom_jeu || "image";
-        const base = safeFileBaseName(baseRaw);
+        const base = safeFileBaseName(req.body.nom || "image");
         const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
-        cb(null, `${base}_${file.fieldname}_${Date.now()}${ext}`);
+        cb(null, `${base}${ext}`);
     }
 });
 
@@ -303,40 +294,7 @@ function renderPage(title, content) {
             .player-card:hover {
               transform: translateY(-2px);
               box-shadow: 0 10px 20px rgba(0,0,0,0.18);
-            }   
-            .zoom-box {
-              background: white;
-              border-radius: 16px;
-              padding: 20px;
-              max-width: min(96vw, 1000px);
-              max-height: 90vh;
-              overflow: auto;
-              transform: scale(0.88);
-              transition: transform 0.18s ease;
-            }
-
-            .zoom-overlay.show .zoom-box {
-              transform: scale(1);
-            }
-
-            .zoomed-card-wrap {
-              display: flex;
-              justify-content: center;
-              padding: 20px 10px;
-            }
-
-            .zoomed-card-wrap .player-card {
-              width: min(800px, 100%);
-              transform: scale(1.28);
-              transform-origin: top center;
-              margin: 40px auto;
-              cursor: default;
-            }
-
-            .zoomed-card-wrap .player-card:hover {
-              transform: scale(1.28);
-              box-shadow: 0 12px 24px rgba(0,0,0,0.22);
-            }          
+            }             
         </style>
     </head>
 
@@ -581,10 +539,10 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               <th>#</th>
               <th>Image</th>
               <th>Nom</th>
-              <th>🔗 Extensions</th>
-              <th>👥 Joueurs</th>
-              <th>⌛ Temps</th>
-              <th>ℹ️ Statut</th>
+              <th>Extensions</th>
+              <th>Joueurs</th>
+              <th>Temps</th>
+              <th>Statut</th>
               <th>⬢ BGG</th>
               <th>⭐ Moyenne</th>
             </tr>
@@ -1066,12 +1024,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
           if (!card || !overlay || !box) return;
 
-          const clone = card.cloneNode(true);
-          clone.removeAttribute("onclick");
-
-          box.innerHTML = "<div class='zoomed-card-wrap'></div>";
-          box.querySelector(".zoomed-card-wrap").appendChild(clone);
-
+          box.innerHTML = card.outerHTML;
           overlay.classList.add("show");
         }
 
@@ -1157,12 +1110,11 @@ app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
 
         const html = `
             <h2>Modifier joueur</h2>
-            <div class="result-box">
             <form method="POST" action="/joueurs/modifier/${id}" enctype="multipart/form-data">
                 Nom:<br>
                 <input name="nom" value="${escapeHtml(joueur.nom || "")}" required><br>
 
-                ⭐ Étoiles:<br>
+                Étoiles:<br>
                 <input type="number" name="etoiles" value="${joueur.etoiles || 0}"><br>
 
                 Carte du joueur:<br>
@@ -1173,7 +1125,6 @@ app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
 
                 <button>Modifier</button>
             </form>
-            </div>
             <a href="/joueurs/liste">⬅ Retour</a>
         `;
 
@@ -2237,7 +2188,7 @@ app.get("/competitions/ajouter", requireAuth, async (req, res) => {
 
         <div class="result-box">
             <form method="POST" action="/competitions/ajouter" id="formCompetition">
-                <b>Nom de la compétition :</b><br>
+                Nom de la compétition :<br>
                 <input name="nom" required><br>
 
                 Jeu joué :<br>
@@ -2257,7 +2208,7 @@ app.get("/competitions/ajouter", requireAuth, async (req, res) => {
 
                 <div id="zoneJoueurs"></div>
 
-                <br><button type="submit">Créer une compétition</button>
+                <button type="submit">Créer la compétition</button>
             </form>
         </div>
 
@@ -2657,12 +2608,12 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
             <table class="jeux-table">
                 <tr>
                     <th>#</th>
-                    <th>⚔️ Jeu</th>
-                    <th>👥 Joueurs</th>
-                    <th>⌛ Date</th>
+                    <th>Jeu</th>
+                    <th>Joueurs</th>
+                    <th>Date</th>
                     <th>Photo</th>
-                    <th>ℹ️ Notes</th>
-                    <th>⚡ Action</th>
+                    <th>Notes</th>
+                    <th>Action</th>
                 </tr>
                 ${(parties || []).map((p, index) => `
                     <tr>
@@ -2792,7 +2743,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                     <tr>
                         <td>${index + 1}</td>
                         <td>${escapeHtml(j.nom)}</td>
-                        <td>${formatPrixCAD(j.prix_achat)}</td>
+                        <td>${j.prix_achat ?? "—"}</td>
                         <td>${escapeHtml(j.notes || "")}</td>
                         <td>
                             <form method="POST" action="/jeux-desires/supprimer/${j.id}" onsubmit="return confirm('Supprimer ce jeu désiré ?');">
