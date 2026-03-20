@@ -1718,14 +1718,15 @@ app.get("/api/stats", requireAuth, async (req, res) => {
         let scoresFiltres = scores || [];
 
         if (joueur === "all") {
-          scoresFiltres = scoresFiltres.filter(
-            s => String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
-          );
+            scoresFiltres = scoresFiltres.filter(
+                s => String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
+            );
         } else if (joueur === "bgg") {
-          scoresFiltres = scoresFiltres.filter(
-            s => String(s.joueurs?.nom || "").trim().toUpperCase() === "BGG"
-          );
+            scoresFiltres = scoresFiltres.filter(
+                s => String(s.joueurs?.nom || "").trim().toUpperCase() === "BGG"
+            );
         }
+        // all_with_bgg = on garde tout
 
         if (!scoresFiltres.length) {
             return res.json({ meilleurs: [], pires: [] });
@@ -1733,7 +1734,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
         let resultats = [];
 
-        if (joueur === "all") {
+        if (joueur === "all" || joueur === "all_with_bgg") {
             const stats = {};
 
             scoresFiltres.forEach((s) => {
