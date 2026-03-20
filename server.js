@@ -1,4 +1,4 @@
-// server.js - version complète Supabase (corrigée)
+// server.js 
 import express from "express";
 import dotenv from "dotenv";
 import session from "express-session";
@@ -6,7 +6,12 @@ import multer from "multer";
 import path, { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
+import sharp from "sharp";
+import fs from "fs/promises";
+
 import { supabase } from "./supabaseClient.js";
+
+
 
 dotenv.config();
 
@@ -34,6 +39,8 @@ app.use(
         saveUninitialized: false
     })
 );
+// ===================== app standalone =====================
+app.use(express.static(join(__dirname, "public")));
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -92,6 +99,12 @@ function renderPage(title, content) {
     <!DOCTYPE html>
     <html lang="fr">
     <head>
+      <link rel="manifest" href="/manifest.webmanifest">
+      <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+      <meta name="apple-mobile-web-app-capable" content="yes">
+      <meta name="apple-mobile-web-app-title" content="Jeux">
+      <meta name="theme-color" content="#c97a00">
+
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${escapeHtml(title)}</title>
@@ -378,7 +391,8 @@ app.get("/", (req, res) => {
     </style>
 
     <div class="login-wrapper">
-      <img src="/images/de.jpg" class="login-image" alt="Logo">version 1b<br>
+      <img src="/images/de.jpg" class="login-image" alt="Logo"><br>
+      aide.innerHTML = "Version 1b";
 
       <form method="POST" action="/login" class="login-form">
         <input name="username" placeholder="Usager" required><br>
@@ -424,6 +438,7 @@ app.get("/menu", requireAuth, (req, res) => {
             <li><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
             <li><a href="/filtrages">🔍 Filtrages</a></li>
             <li><a href="/competitions/liste">🏆 Compétitions</a></li>
+            <li><a href="/jeux-en-cours">⏸️ Jeux en cours</a></li>
             <li><a href="/jeux-desires">🛒 Jeux désirés</a></li>
             <li><a href="/logout">⏻ Déconnexion</a></li>
           </div>
@@ -473,12 +488,13 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         <h2>⚔️ Liste des jeux</h2>
 
         <button onclick="window.location.href='/jeux/ajouter'">Ajouter un jeu</button><br>
-        <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br><br>
-
+        <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br>
+        <input id="rechercheJeu" placeholder="Rechercher un jeu..." style="max-width:300px;"><br><br>
+        
         <a href="/menu">⬅ Retour</a><br><br>
       <div class="table-wrap">
         <table class="jeux-table">
-          <tr>
+          <tr data-jeu="${escapeHtml((j.nom || "") + " " + (j.extensions || "") + " " + (j.statut || ""))}">        
             <th>#</th>
             <th>Nom</th>
             <th>Extensions</th>
@@ -513,7 +529,22 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         });
 
       html += `</table></div><br><a href="/menu">⬅ Retour</a>`;
+      html += `
+      <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const champ = document.getElementById("rechercheJeu");
+        if (!champ) return;
 
+        champ.addEventListener("input", () => {
+          const q = champ.value.toLowerCase().trim();
+          document.querySelectorAll(".jeux-table tr[data-jeu]").forEach(row => {
+            const txt = row.getAttribute("data-jeu").toLowerCase();
+            row.style.display = txt.includes(q) ? "" : "none";
+          });
+        });
+      });
+      </script>
+      `;
         res.send(renderPage("Liste des jeux", html));
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
@@ -533,20 +564,32 @@ app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) 
             bgg_average_rating
         } = req.body;
 
-        const image = req.file ? req.file.filename : null;
+        let image = null;
 
-        const { error } = await supabase.from("jeux").insert([
-            {
-                nom: nom?.trim(),
-                extensions: extensions?.trim() || null,
-                min_joueurs: toIntOrNull(min_joueurs),
-                max_joueurs: toIntOrNull(max_joueurs),
-                temps_min: toIntOrNull(temps_min),
-                temps_max: toIntOrNull(temps_max),
-                bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null,
-                image
-            }
-        ]);
+        if (req.file) {
+            const inputPath = req.file.path;
+            const outputName = "jeu_" + safeFileBaseName(nom || "image") + ".jpg";
+            const outputPath = path.join("public/images", outputName);
+
+            await sharp(inputPath)
+                .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
+                .jpeg({ quality: 82 })
+                .toFile(outputPath);
+
+            await fs.unlink(inputPath);
+            image = outputName;
+        }
+
+        const { error } = await supabase.from("jeux").insert([{
+            nom: nom?.trim(),
+            extensions: extensions?.trim() || null,
+            min_joueurs: toIntOrNull(min_joueurs),
+            max_joueurs: toIntOrNull(max_joueurs),
+            temps_min: toIntOrNull(temps_min),
+            temps_max: toIntOrNull(temps_max),
+            bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null,
+            image
+        }]);
 
         if (error) throw error;
 
@@ -661,32 +704,33 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
         const html = `
         <h1>Modifier un jeu</h1>
 
+        <div class="result-box">
         <form method="POST" action="/jeux/modifier" enctype="multipart/form-data">
           <input type="hidden" name="id" value="${jeu.id}">
 
           Nom<br>
-          <input name="nom" value="${escapeHtml(jeu.nom || "")}" required><br><br>
+          <input name="nom" value="${escapeHtml(jeu.nom || "")}" required><br>
 
           Extensions<br>
-          <input name="extensions" value="${escapeHtml(jeu.extensions || "")}"><br><br>
+          <input name="extensions" value="${escapeHtml(jeu.extensions || "")}"><br>
 
           Joueurs min<br>
-          <input type="number" name="min_joueurs" min="0" value="${jeu.min_joueurs ?? ""}"><br><br>
+          <input type="number" name="min_joueurs" min="0" value="${jeu.min_joueurs ?? ""}"><br>
 
           Joueurs max<br>
-          <input type="number" name="max_joueurs" min="0" value="${jeu.max_joueurs ?? ""}"><br><br>
+          <input type="number" name="max_joueurs" min="0" value="${jeu.max_joueurs ?? ""}"><br>
 
           Temps min<br>
-          <input type="number" name="temps_min" min="0" value="${jeu.temps_min ?? ""}"><br><br>
+          <input type="number" name="temps_min" min="0" value="${jeu.temps_min ?? ""}"><br>
 
           Temps max<br>
-          <input type="number" name="temps_max" min="0" value="${jeu.temps_max ?? ""}"><br><br>
+          <input type="number" name="temps_max" min="0" value="${jeu.temps_max ?? ""}"><br>
 
           Statut<br>
-          <input name="statut" value="${escapeHtml(jeu.statut || "")}"><br><br>
+          <input name="statut" value="${escapeHtml(jeu.statut || "")}"><br>
 
           BGG average rating<br>
-          <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating" value="${jeu.bgg_average_rating ?? ""}"><br><br>
+          <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating" value="${jeu.bgg_average_rating ?? ""}"><br>
 
           ${jeu.image ? `<div>Image actuelle :<br><img src="/images/${encodeURIComponent(jeu.image)}" width="90"></div><br>` : ""}
 
@@ -695,7 +739,7 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
 
           <button type="submit">Enregistrer</button>
         </form>
-
+        </div>
         <a href="/jeux/liste">⬅ Retour</a>
         `;
 
@@ -705,45 +749,44 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
     }
 });
 
-app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res) => {
+app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) => {
     try {
         const {
-            id,
             nom,
             extensions,
             min_joueurs,
             max_joueurs,
             temps_min,
             temps_max,
-            statut,
-            infos,
             bgg_average_rating
         } = req.body;
 
-        if (!id) {
-            return res.send(renderPage("Erreur", "ID du jeu manquant."));
+        let image = null;
+
+        if (req.file) {
+            const inputPath = req.file.path;
+            const outputName = "jeu_" + safeFileBaseName(nom || "image") + ".jpg";
+            const outputPath = path.join("public/images", outputName);
+
+            await sharp(inputPath)
+                .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
+                .jpeg({ quality: 82 })
+                .toFile(outputPath);
+
+            await fs.unlink(inputPath);
+            image = outputName;
         }
 
-        const updateData = {
+        const { error } = await supabase.from("jeux").insert([{
             nom: nom?.trim(),
             extensions: extensions?.trim() || null,
             min_joueurs: toIntOrNull(min_joueurs),
             max_joueurs: toIntOrNull(max_joueurs),
             temps_min: toIntOrNull(temps_min),
             temps_max: toIntOrNull(temps_max),
-            statut: statut?.trim() || null,
-            infos: infos?.trim() || null,
-            bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null
-        };
-
-        if (req.file) {
-            updateData.image = req.file.filename;
-        }
-
-        const { error } = await supabase
-            .from("jeux")
-            .update(updateData)
-            .eq("id", id);
+            bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null,
+            image
+        }]);
 
         if (error) throw error;
 
@@ -930,8 +973,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
 app.get("/joueurs/ajouter", requireAuth, (req, res) => {
     const html = `
-        <h2>Ajouter un joueur</h2>
-        <div class="result-box">
+        <h2>Ajouter joueur</h2>
         <form method="POST" action="/joueurs/ajouter" enctype="multipart/form-data">
             Nom:<br>
             <input name="nom" required><br>
@@ -939,27 +981,33 @@ app.get("/joueurs/ajouter", requireAuth, (req, res) => {
             Étoiles:<br>
             <input type="number" name="etoiles"><br>
 
-            Image:<br>
-            <input type="file" name="image"><br><br>
+            Carte du joueur:<br>
+            <input type="file" name="image" accept="image/*"><br>
+
+            Photo souvenir:<br>
+            <input type="file" name="photo" accept="image/*"><br><br>
 
             <button>Ajouter</button>
         </form>
-        </div>
         <a href="/joueurs/liste">⬅ Retour</a>
     `;
-
     res.send(renderPage("Ajouter joueur", html));
 });
 
-app.post("/joueurs/ajouter", requireAuth, upload.single("image"), async (req, res) => {
+app.post("/joueurs/ajouter", requireAuth, upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "photo", maxCount: 1 }
+]), async (req, res) => {
     try {
         const nom = req.body.nom;
         const etoiles = req.body.etoiles ? parseInt(req.body.etoiles, 10) : null;
-        const image = req.file ? req.file.filename : null;
+
+        const image = req.files?.image?.[0]?.filename || null;
+        const photo = req.files?.photo?.[0]?.filename || null;
 
         const { error } = await supabase
             .from("joueurs")
-            .insert([{ nom, etoiles, image }]);
+            .insert([{ nom, etoiles, image, photo }]);
 
         if (error) throw error;
 
@@ -993,8 +1041,11 @@ app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
                 Étoiles:<br>
                 <input type="number" name="etoiles" value="${joueur.etoiles || 0}"><br>
 
-                Image:<br>
-                <input type="file" name="image"><br><br>
+                Carte du joueur:<br>
+                <input type="file" name="image" accept="image/*"><br>
+
+                Photo souvenir:<br>
+                <input type="file" name="photo" accept="image/*"><br><br>
 
                 <button>Modifier</button>
             </form>
@@ -1007,16 +1058,23 @@ app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
     }
 });
 
-app.post("/joueurs/modifier/:id", requireAuth, upload.single("image"), async (req, res) => {
+    app.post("/joueurs/modifier/:id", requireAuth, upload.fields([
+        { name: "image", maxCount: 1 },
+        { name: "photo", maxCount: 1 }
+    ]), async (req, res) => {
     try {
         const { id } = req.params;
         const nom = req.body.nom;
         const etoiles = req.body.etoiles ? parseInt(req.body.etoiles, 10) : null;
 
-        const updateData = { nom, etoiles };
+        let updateData = { nom, etoiles };
 
-        if (req.file) {
-            updateData.image = req.file.filename;
+        if (req.files?.image?.[0]) {
+            updateData.image = req.files.image[0].filename;
+        }
+
+        if (req.files?.photo?.[0]) {
+            updateData.photo = req.files.photo[0].filename;
         }
 
         const { error } = await supabase
@@ -1459,6 +1517,14 @@ app.get("/stats", requireAuth, async (req, res) => {
             j => String(j.nom || "").trim().toUpperCase() !== "BGG"
         );
 
+        const joueursSansBGG = (joueursBrut || []).filter(
+            j => String(j.nom || "").trim().toUpperCase() !== "BGG"
+          );
+
+          const joueurBGG = (joueursBrut || []).find(
+            j => String(j.nom || "").trim().toUpperCase() === "BGG"
+          );
+
         const options = joueurs
             .map((j) => '<option value="' + j.id + '">' + escapeHtml(j.nom) + "</option>")
             .join("");
@@ -1470,12 +1536,13 @@ app.get("/stats", requireAuth, async (req, res) => {
 
         <form id="formStats" class="result-box">
           Choisir joueur:<br>
-          <select name="joueur" id="choixJoueur">
-            <option value="">-- Choisir --</option>
-            <option value="all">Tous les joueurs</option>
-            <option value="bgg">BGG</option>
-            ${options}
-          </select>
+        <select name="joueur" id="choixJoueur">
+          <option value="">-- Choisir --</option>
+          <option value="all">Tous les joueurs</option>
+          <option value="all_with_bgg">Tous les joueurs avec BGG</option>
+          <option value="bgg">BGG</option>
+          ${joueursSansBGG.map(j => '<option value="' + j.id + '">' + escapeHtml(j.nom) + '</option>').join("")}
+        </select>
           <br>
 
           Nombre de jeux à afficher:<br>
@@ -1493,7 +1560,7 @@ app.get("/stats", requireAuth, async (req, res) => {
         function afficherCartesJoueurs(selection) {
           const divCartes = document.getElementById("carte-joueur");
 
-          if (!selection || selection === "bgg") {
+          if (!selection) {
             divCartes.innerHTML = "";
             return;
           }
@@ -1501,7 +1568,11 @@ app.get("/stats", requireAuth, async (req, res) => {
           let joueursAAfficher = [];
 
           if (selection === "all") {
+            joueursAAfficher = joueursData.filter(j => String(j.nom || "").trim().toUpperCase() !== "BGG");
+          } else if (selection === "all_with_bgg") {
             joueursAAfficher = joueursData;
+          } else if (selection === "bgg") {
+            joueursAAfficher = joueursData.filter(j => String(j.nom || "").trim().toUpperCase() === "BGG");
           } else {
             const joueur = joueursData.find(j => String(j.id) === String(selection));
             if (joueur) joueursAAfficher = [joueur];
@@ -1512,24 +1583,15 @@ app.get("/stats", requireAuth, async (req, res) => {
             return;
           }
 
-          if (selection === "all") {
-            divCartes.innerHTML =
-              "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px;'>" +
-              joueursAAfficher.map(j =>
-                "<div class='result-box' style='flex:1 1 180px; max-width:220px; min-width:150px; margin:0; text-align:center;'>" +
-                  (j.image ? "<img src='/images/" + encodeURIComponent(j.image) + "' width='80'><br>" : "") +
-                  "<strong>" + j.nom + "</strong>" +
-                "</div>"
-              ).join("") +
-              "</div>";
-          } else {
-            const j = joueursAAfficher[0];
-            divCartes.innerHTML =
-              "<div class='result-box' style='margin-bottom:12px; text-align:center; max-width:220px;'>" +
+          divCartes.innerHTML =
+            "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px;'>" +
+            joueursAAfficher.map(j =>
+              "<div class='result-box' style='flex:1 1 180px; max-width:220px; min-width:150px; margin:0; text-align:center;'>" +
                 (j.image ? "<img src='/images/" + encodeURIComponent(j.image) + "' width='80'><br>" : "") +
                 "<strong>" + j.nom + "</strong>" +
-              "</div>";
-          }
+              "</div>"
+            ).join("") +
+            "</div>";
         }
 
         function renderBloc(titre, items, modeLabel) {
@@ -1646,7 +1708,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
                 )
             `);
 
-        if (joueur !== "all") {
+        if (!["all", "all_with_bgg", "bgg"].includes(joueur)) {
             query = query.eq("joueur_id", joueur);
         }
 
@@ -1655,10 +1717,16 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
         let scoresFiltres = scores || [];
 
+        let scoresFiltres = scores || [];
+
         if (joueur === "all") {
-            scoresFiltres = scoresFiltres.filter(
-                s => String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
-            );
+          scoresFiltres = scoresFiltres.filter(
+            s => String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
+          );
+        } else if (joueur === "bgg") {
+          scoresFiltres = scoresFiltres.filter(
+            s => String(s.joueurs?.nom || "").trim().toUpperCase() === "BGG"
+          );
         }
 
         if (!scoresFiltres.length) {
@@ -2383,6 +2451,158 @@ app.post("/competitions/etoile", requireAuth, async (req, res) => {
         if (updateCompError) throw updateCompError;
 
         res.redirect("/competitions/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+// ===================== JEUX EN COURS =====================
+app.get("/jeux-en-cours", requireAuth, async (req, res) => {
+    try {
+        const { data: parties, error: partiesError } = await supabase
+            .from("jeux_en_cours")
+            .select("*")
+            .order("date_creation", { ascending: false });
+
+        if (partiesError) throw partiesError;
+
+        const { data: joueurs, error: joueursError } = await supabase
+            .from("joueurs")
+            .select("id, nom")
+            .order("nom");
+
+        if (joueursError) throw joueursError;
+
+        const { data: liens, error: liensError } = await supabase
+            .from("jeux_en_cours_joueurs")
+            .select(`
+                jeu_en_cours_id,
+                joueur_id,
+                joueurs ( nom )
+            `);
+
+        if (liensError) throw liensError;
+
+        const joueursParPartie = {};
+        (liens || []).forEach(l => {
+            if (!joueursParPartie[l.jeu_en_cours_id]) joueursParPartie[l.jeu_en_cours_id] = [];
+            joueursParPartie[l.jeu_en_cours_id].push(l.joueurs?.nom || "Joueur");
+        });
+
+        const html = `
+        <h2>⏸️ Jeux en cours</h2>
+
+        <div class="result-box">
+            <form method="POST" action="/jeux-en-cours/ajouter" enctype="multipart/form-data">
+                Nom du jeu:<br>
+                <input name="nom_jeu" required><br>
+
+                Joueurs impliqués:<br>
+                <select name="joueur_ids" multiple size="6" style="max-width:400px;">
+                    ${(joueurs || []).map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br>
+
+                Photo:<br>
+                <input type="file" name="photo" accept="image/*"><br>
+
+                Notes:<br>
+                <textarea name="notes" rows="4"></textarea><br><br>
+
+                <button>Ajouter</button>
+            </form>
+        </div>
+
+        <br>
+
+        <div class="table-wrap">
+            <table class="jeux-table">
+                <tr>
+                    <th>#</th>
+                    <th>Jeu</th>
+                    <th>Joueurs</th>
+                    <th>Date</th>
+                    <th>Photo</th>
+                    <th>Notes</th>
+                    <th>Action</th>
+                </tr>
+                ${(parties || []).map((p, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${escapeHtml(p.nom_jeu)}</td>
+                        <td>${(joueursParPartie[p.id] || []).join(", ") || "—"}</td>
+                        <td>${new Date(p.date_creation).toLocaleDateString("fr-CA")}</td>
+                        <td>${p.photo ? `<img src="/images/${encodeURIComponent(p.photo)}" width="70">` : "—"}</td>
+                        <td>${escapeHtml(p.notes || "")}</td>
+                        <td>
+                            <form method="POST" action="/jeux-en-cours/supprimer/${p.id}" onsubmit="return confirm('Supprimer cette partie en cours ?');">
+                                <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                            </form>
+                        </td>
+                    </tr>
+                `).join("")}
+            </table>
+        </div>
+
+        <br>
+        <a href="/menu">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Jeux en cours", html));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (req, res) => {
+    try {
+        const nom_jeu = (req.body.nom_jeu || "").trim();
+        const notes = (req.body.notes || "").trim() || null;
+
+        let joueur_ids = req.body.joueur_ids || [];
+        if (!Array.isArray(joueur_ids)) joueur_ids = [joueur_ids];
+        joueur_ids = joueur_ids.map(id => Number(id)).filter(id => !Number.isNaN(id));
+
+        const photo = req.file ? req.file.filename : null;
+
+        const { data: partie, error } = await supabase
+            .from("jeux_en_cours")
+            .insert([{ nom_jeu, photo, notes }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        if (joueur_ids.length > 0) {
+            const inserts = joueur_ids.map(joueur_id => ({
+                jeu_en_cours_id: partie.id,
+                joueur_id
+            }));
+
+            const { error: liensError } = await supabase
+                .from("jeux_en_cours_joueurs")
+                .insert(inserts);
+
+            if (liensError) throw liensError;
+        }
+
+        res.redirect("/jeux-en-cours");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/jeux-en-cours/supprimer/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from("jeux_en_cours")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
+
+        res.redirect("/jeux-en-cours");
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
