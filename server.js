@@ -233,6 +233,30 @@ function renderPage(title, content) {
             -webkit-overflow-scrolling: touch;
           }
 
+          .game-thumb {
+            cursor: pointer;
+            border-radius: 8px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+          }
+
+          .game-thumb:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.18);
+          }
+
+          .zoomed-game-image {
+            text-align: center;
+          }
+
+          .zoomed-game-image img {
+            max-width: min(90vw, 700px);
+            max-height: 80vh;
+            width: auto;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+          }
+
           @media (max-width: 600px) {
             body {
               font-size: 17px;
@@ -521,6 +545,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
+          <div style="color:#666;"> ver 1.C</div>
         </div>
       </form>
     </div>
@@ -573,16 +598,6 @@ app.get("/logout", requireAuth, (req, res) => {
 });
 
 // ===================== ROUTES JEUX =====================
-app.get("/api/jeux", requireAuth, async (req, res) => {
-    try {
-        const { data, error } = await supabase.from("jeux").select("*").order("nom");
-        if (error) throw error;
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 app.get("/jeux/liste", requireAuth, async (req, res) => {
     try {
         const { data: jeux, error } = await supabase
@@ -639,6 +654,8 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 moyenne = avg.toFixed(2);
             }
 
+            const imageSrc = j.image ? `/images/${encodeURIComponent(j.image)}` : "";
+
             html += `
             <tr data-jeu="${escapeHtml(
                 (j.nom || "") + " " +
@@ -648,7 +665,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               <td>${index + 1}</td>
               <td>${
                   j.image
-                      ? `<img src="/images/${encodeURIComponent(j.image)}" width="55">`
+                      ? `<img src="${imageSrc}" class="game-thumb" width="55" onclick="ouvrirZoomJeu('${imageSrc}', '${escapeHtml(j.nom || "")}')">`
                       : "—"
               }</td>
               <td><b>${escapeHtml(j.nom || "")}</b></td>
@@ -670,6 +687,10 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
           </table>
         </div>
 
+        <div id="zoomOverlayJeu" class="zoom-overlay" onclick="fermerZoomJeu()">
+          <div class="zoom-box" id="zoomBoxJeu" onclick="event.stopPropagation()"></div>
+        </div>
+
         <br>
         <a href="/menu">⬅ Retour</a>
 
@@ -680,13 +701,31 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
 
           champ.addEventListener("input", () => {
             const q = champ.value.toLowerCase().trim();
-
             document.querySelectorAll(".jeux-table tr[data-jeu]").forEach(row => {
               const txt = (row.getAttribute("data-jeu") || "").toLowerCase();
               row.style.display = txt.includes(q) ? "" : "none";
             });
           });
         });
+
+        function ouvrirZoomJeu(src, nom) {
+          const overlay = document.getElementById("zoomOverlayJeu");
+          const box = document.getElementById("zoomBoxJeu");
+          if (!overlay || !box) return;
+
+          box.innerHTML =
+            "<div class='zoomed-game-image'>" +
+              "<img src='" + src + "' alt='" + nom + "'>" +
+              "<div style='margin-top:10px; font-weight:bold;'>" + nom + "</div>" +
+            "</div>";
+
+          overlay.classList.add("show");
+        }
+
+        function fermerZoomJeu() {
+          const overlay = document.getElementById("zoomOverlayJeu");
+          if (overlay) overlay.classList.remove("show");
+        }
         </script>
         `;
 
@@ -706,10 +745,12 @@ app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) 
             max_joueurs,
             temps_min,
             temps_max,
-            bgg_average_rating
+            bgg_average_rating,
+            rotation
         } = req.body;
 
         let image = null;
+        const rotationAngle = Number(rotation || 0);
 
         if (req.file) {
             const inputPath = req.file.path;
@@ -717,6 +758,7 @@ app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) 
             const outputPath = path.join("public/images", outputName);
 
             await sharp(inputPath)
+                .rotate(rotationAngle)
                 .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
                 .jpeg({ quality: 82 })
                 .toFile(outputPath);
@@ -768,6 +810,13 @@ app.get("/jeux/ajouter", requireAuth, (req, res) => {
             Temps max:<br>
             <input type="number" name="temps_max" min="0"><br>
 
+            Rotation de l'image:<br>
+            <select name="rotation" style="max-width:120px;">
+                <option value="0">0°</option>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+            </select><br>            
             Image:<br>
             <input type="file" name="image" accept="image/*"><br><br>
 
@@ -879,6 +928,13 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
 
           ${jeu.image ? `<div>Image actuelle :<br><img src="/images/${encodeURIComponent(jeu.image)}" width="90"></div><br>` : ""}
 
+          Rotation de l'image:<br>
+          <select name="rotation" style="max-width:120px;">
+              <option value="0">0°</option>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
+          </select><br><br>          
           Nouvelle image<br>
           <input type="file" name="image" accept="image/*"><br><br>
 
@@ -905,12 +961,21 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
             temps_min,
             temps_max,
             statut,
-            bgg_average_rating
+            bgg_average_rating,
+            rotation
         } = req.body;
 
         if (!id) {
             return res.send(renderPage("Erreur", "ID du jeu manquant."));
         }
+
+        const { data: jeuActuel, error: jeuError } = await supabase
+            .from("jeux")
+            .select("image")
+            .eq("id", id)
+            .single();
+
+        if (jeuError) throw jeuError;
 
         const updateData = {
             nom: nom?.trim(),
@@ -923,18 +988,33 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
             bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null
         };
 
+        const rotationAngle = Number(rotation || 0);
+
         if (req.file) {
             const inputPath = req.file.path;
             const outputName = "jeu_" + safeFileBaseName(nom || "image") + ".jpg";
             const outputPath = path.join("public/images", outputName);
 
             await sharp(inputPath)
+                .rotate(rotationAngle)
                 .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
                 .jpeg({ quality: 82 })
                 .toFile(outputPath);
 
             await fs.unlink(inputPath);
             updateData.image = outputName;
+        } else if (rotationAngle !== 0 && jeuActuel?.image) {
+            const currentPath = path.join("public/images", jeuActuel.image);
+            const tempPath = path.join("public/images", "tmp_" + jeuActuel.image);
+
+            await sharp(currentPath)
+                .rotate(rotationAngle)
+                .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
+                .jpeg({ quality: 82 })
+                .toFile(tempPath);
+
+            await fs.unlink(currentPath);
+            await fs.rename(tempPath, currentPath);
         }
 
         const { error } = await supabase
@@ -1535,12 +1615,33 @@ app.post("/scores/ajouter", requireAuth, async (req, res) => {
 
         if (error) throw error;
 
-        res.send(
-            renderPage(
-                "Succès",
-                "<h2>✅ Le score a été enregistré</h2><a href='/scores/ajouter'>⬅ Retour</a>"
-            )
-        );
+res.send(
+    renderPage(
+        "Succès",
+        `
+        <audio id="coin-sound" autoplay>
+          <source src="/sounds/coin.mp3" type="audio/mpeg">
+        </audio>
+
+        <script>
+        window.addEventListener("load", () => {
+          const a = document.getElementById("coin-sound");
+          if (!a) return;
+          const p = a.play();
+          if (p !== undefined) {
+            p.catch(() => {
+              document.body.addEventListener("click", () => a.play(), { once: true });
+              document.body.addEventListener("touchstart", () => a.play(), { once: true });
+            });
+          }
+        });
+        </script>
+
+        <h2>✅ Le score a été enregistré</h2>
+        <a href='/scores/ajouter'>⬅ Retour</a>
+        `
+    )
+);
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
@@ -1973,8 +2074,8 @@ app.get("/filtrages", requireAuth, async (req, res) => {
         const suggestionHtml = suggestion
             ? `
             <div class="result-box">
-              <h3>🎲 Suggestion du moment</h3>
-              <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+              <h3>🎲 Suggestion du moment : </h3>
+              <div style="font-size:1.1em; color:#1b8f3a;"><b>${escapeHtml(suggestion.nom)}</b></div>
                 ${suggestion.image ? `<img src="/images/${encodeURIComponent(suggestion.image)}" width="90">` : ""}
                 <div>
                   <div style="font-size:1.1em;"><b>${escapeHtml(suggestion.nom)}</b></div>
