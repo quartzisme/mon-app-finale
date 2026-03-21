@@ -545,7 +545,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
-          <div style="color:#666;"> ver 1.C</div>
+          <div style="color:#666; font-size: 10px;"> ver 1.C</div>
         </div>
       </form>
     </div>
@@ -1445,7 +1445,7 @@ function configurerChampScore() {
     aide.innerHTML = "BGG : décimales libres autorisées (ex. 7,6 ou 7.6).";
   } else {
     inputScore.step = "0.5";
-    inputScore.placeholder = "Ex. 7.5 ou 8";
+    inputScore.placeholder = "Ex. 7.5 ou 8.0";
     aide.innerHTML = "Joueurs : seulement des valeurs en ,0 ou ,5.";
   }
 }
@@ -1788,36 +1788,47 @@ app.get("/stats", requireAuth, async (req, res) => {
 
         if (error) throw error;
 
-        const joueurs = (joueursBrut || []).filter(
-            j => String(j.nom || "").trim().toUpperCase() !== "BGG"
-        );
+        const tousLesJoueurs = joueursBrut || [];
+        const normalise = (nom) => String(nom || "").trim().toUpperCase();
 
-        const joueursSansBGG = (joueursBrut || []).filter(
-            j => String(j.nom || "").trim().toUpperCase() !== "BGG"
-          );
+        const vincent = tousLesJoueurs.find(j => normalise(j.nom) === "VINCENT");
+        const marc = tousLesJoueurs.find(j => normalise(j.nom) === "MARC");
+        const julie = tousLesJoueurs.find(j => normalise(j.nom) === "JULIE");
+        const bgg = tousLesJoueurs.find(j => normalise(j.nom) === "BGG");
 
-          const joueurBGG = (joueursBrut || []).find(
-            j => String(j.nom || "").trim().toUpperCase() === "BGG"
-          );
+        const autresJoueurs = tousLesJoueurs.filter(j => {
+            const n = normalise(j.nom);
+            return !["VINCENT", "MARC", "JULIE", "BGG"].includes(n);
+        });
 
-        const options = joueurs
-            .map((j) => '<option value="' + j.id + '">' + escapeHtml(j.nom) + "</option>")
+        const joueursPourSelect = [
+            ...(vincent ? [vincent] : []),
+            ...(marc ? [marc] : []),
+            ...(julie ? [julie] : []),
+            ...autresJoueurs
+        ];
+
+        const optionsJoueurs = joueursPourSelect
+            .map(j => '<option value="' + j.id + '">' + escapeHtml(j.nom) + '</option>')
             .join("");
 
-        const joueursJson = JSON.stringify(joueursBrut || []).replace(/</g, "\\u003c");
+        const joueursData = JSON.stringify(tousLesJoueurs).replace(/</g, "\\u003c");
 
         const html = `
         <h2>🥇 Top jeux 💀</h2>
 
         <form id="formStats" class="result-box">
           Choisir joueur:<br>
-        <select name="joueur" id="choixJoueur">
-          <option value="">-- Choisir --</option>
-          <option value="all">Tous les joueurs</option>
-          <option value="all_with_bgg">Tous les joueurs + BGG</option>
-          <option value="bgg">BGG</option>
-          ${joueursSansBGG.map(j => '<option value="' + j.id + '">' + escapeHtml(j.nom) + '</option>').join("")}
-        </select>
+          <select name="joueur" id="choixJoueur">
+            <option value="">-- Choisir --</option>
+            ${vincent ? `<option value="${vincent.id}">${escapeHtml(vincent.nom)}</option>` : ""}
+            ${marc ? `<option value="${marc.id}">${escapeHtml(marc.nom)}</option>` : ""}
+            ${julie ? `<option value="${julie.id}">${escapeHtml(julie.nom)}</option>` : ""}
+            <option value="all">Tous les joueurs</option>
+            <option value="all_with_bgg">Tous les joueurs + BGG</option>
+            ${autresJoueurs.map(j => '<option value="' + j.id + '">' + escapeHtml(j.nom) + '</option>').join("")}
+            ${bgg ? '<option value="bgg">BGG</option>' : ""}
+          </select>
           <br>
 
           Nombre de jeux à afficher:<br>
@@ -1830,7 +1841,7 @@ app.get("/stats", requireAuth, async (req, res) => {
         <a href="/menu">⬅ Retour</a>
 
         <script>
-        const joueursData = ${joueursJson};
+        const joueursData = ${joueursData};
 
         function afficherCartesJoueurs(selection) {
           const divCartes = document.getElementById("carte-joueur");
@@ -1870,8 +1881,10 @@ app.get("/stats", requireAuth, async (req, res) => {
         }
 
         function renderBloc(titre, items, modeLabel) {
-          const couleurTitre = titre.includes("Meilleurs") ? "#1b8f3a" : "#c62828";
-          let html = "<div class='result-box'><h3 style='color:" + couleurTitre + ";'>" + titre + "</h3>";
+          const estMeilleur = titre.includes("Meilleurs");
+          const rankColor = estMeilleur ? "#1b8f3a" : "#c62828";
+
+          let html = "<div class='result-box'><h3 style='color:" + rankColor + ";'>" + titre + "</h3>";
 
           if (!items || items.length === 0) {
             html += "Aucune donnée";
@@ -1881,7 +1894,11 @@ app.get("/stats", requireAuth, async (req, res) => {
               if (j.image) {
                 html += "<img src='/images/" + encodeURIComponent(j.image) + "' width='55'>";
               }
-              html += "<div><b>#"+ (idx + 1) +" — " + j.jeu + "</b><br>" + modeLabel + " : " + Number(j.moyenne).toFixed(2) + "</div>";
+              html += "<div>" +
+                        "<span style='color:" + rankColor + "; font-weight:bold;'>#" + (idx + 1) + "</span> " +
+                        "<b style='color:#000;'>" + j.jeu + "</b><br>" +
+                        "<span style='color:#000;'>" + modeLabel + " : " + Number(j.moyenne).toFixed(2) + "</span>" +
+                      "</div>";
               html += "</div>";
             });
           }
@@ -2073,14 +2090,11 @@ app.get("/filtrages", requireAuth, async (req, res) => {
 
         const suggestionHtml = suggestion
             ? `
-            <div class="result-box">
-              <h3>🎲 Suggestion du moment : </h3>
-              <div style="font-size:1.1em; color:#1b8f3a;"><b>${escapeHtml(suggestion.nom)}</b></div>
+            <div class="result-box" style="margin-bottom:12px;">
+              <h3 style="margin-top:0;">🎲 Suggestion du moment</h3>
+              <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
                 ${suggestion.image ? `<img src="/images/${encodeURIComponent(suggestion.image)}" width="90">` : ""}
-                <div>
-                  <div style="font-size:1.1em;"><b>${escapeHtml(suggestion.nom)}</b></div>
-                  <div style="color:#666;">Pourquoi pas celui-là ?</div>
-                </div>
+                <div style="font-size:1.1em; color:#1b8f3a;"><b>${escapeHtml(suggestion.nom)}</b></div>
               </div>
             </div>
             `
@@ -2091,7 +2105,7 @@ app.get("/filtrages", requireAuth, async (req, res) => {
 
         ${suggestionHtml}
 
-        <div class="result-box">
+        <div class="result-box" style="margin-top:0;">
           <form id="formFiltre">
             <label>👤 Joueurs minimum :</label>
             <input type="number" name="minj" min="0" style="width:90px;"><br>
@@ -2843,7 +2857,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                     <th>⚔️ Jeu</th>
                     <th>👥 Joueurs</th>
                     <th>⌛ Date</th>
-                    <th>Photo</th>
+                    <th>📷 Photo</th>
                     <th>ℹ️ Notes</th>
                     <th>⚡ Action</th>
                 </tr>
@@ -2950,9 +2964,12 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 Nom du jeu:<br>
                 <input name="nom" required><br>
 
+                Extension:<br>
+                <input name="extension"><br>
+
                 Prix d'achat:<br>
                 <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="20.00"><br>
-                <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div>
+                <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div><br>
 
                 Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
@@ -2968,6 +2985,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 <tr>
                     <th>#</th>
                     <th>Nom</th>
+                    <th>Extension</th>
                     <th>Prix d'achat</th>
                     <th>Notes</th>
                     <th>Action</th>
@@ -2976,6 +2994,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                     <tr>
                         <td>${index + 1}</td>
                         <td>${escapeHtml(j.nom)}</td>
+                        <td>${escapeHtml(j.extension || "") || "—"}</td>
                         <td>${formatPrixCAD(j.prix_achat)}</td>
                         <td>${escapeHtml(j.notes || "")}</td>
                         <td>
@@ -3001,8 +3020,11 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
 app.post("/jeux-desires/ajouter", requireAuth, async (req, res) => {
     try {
         const nom = (req.body.nom || "").trim();
+        const extension = (req.body.extension || "").trim() || null;
         const notes = (req.body.notes || "").trim() || null;
-        const prix_achat = req.body.prix_achat ? Number(String(req.body.prix_achat).replace(",", ".")) : null;
+        const prix_achat = req.body.prix_achat
+            ? Number(String(req.body.prix_achat).replace(",", "."))
+            : null;
 
         if (!nom) {
             return res.send(renderPage("Erreur", "Le nom du jeu est requis."));
@@ -3012,6 +3034,7 @@ app.post("/jeux-desires/ajouter", requireAuth, async (req, res) => {
             .from("jeux_desires")
             .insert([{
                 nom,
+                extension,
                 prix_achat,
                 notes
             }]);
