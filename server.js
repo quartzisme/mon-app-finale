@@ -79,6 +79,11 @@ function safeFileBaseName(value = "image") {
         .replace(/^_+|_+$/g, "") || "image";
 }
 
+function getGameImageUrl(filename) {
+    if (!filename) return "";
+    return `${process.env.SUPABASE_URL}/storage/v1/object/public/jeux-images/${filename}`;
+}
+
 function formatPrixCAD(value) {
     if (value === undefined || value === null || value === "") return "—";
     return Number(value).toLocaleString("fr-CA", {
@@ -654,7 +659,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 moyenne = avg.toFixed(2);
             }
 
-            const imageSrc = j.image ? `/images/${encodeURIComponent(j.image)}` : "";
+            const imageSrc = j.image ? getGameImageUrl(j.image) : "";
 
             html += `
             <tr data-jeu="${escapeHtml(
@@ -754,16 +759,24 @@ app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) 
 
         if (req.file) {
             const inputPath = req.file.path;
-            const outputName = "jeu_" + safeFileBaseName(nom || "image") + ".jpg";
-            const outputPath = path.join("public/images", outputName);
+            const outputName = `jeu_${safeFileBaseName(nom || "image")}_${Date.now()}.jpg`;
 
-            await sharp(inputPath)
+            const buffer = await sharp(inputPath)
                 .rotate(rotationAngle)
                 .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
                 .jpeg({ quality: 82 })
-                .toFile(outputPath);
+                .toBuffer();
+
+            const { error: uploadError } = await supabase.storage
+                .from("jeux-images")
+                .upload(outputName, buffer, {
+                    contentType: "image/jpeg",
+                    upsert: true
+                });
 
             await fs.unlink(inputPath);
+
+            if (uploadError) throw uploadError;
             image = outputName;
         }
 
@@ -969,14 +982,6 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
             return res.send(renderPage("Erreur", "ID du jeu manquant."));
         }
 
-        const { data: jeuActuel, error: jeuError } = await supabase
-            .from("jeux")
-            .select("image")
-            .eq("id", id)
-            .single();
-
-        if (jeuError) throw jeuError;
-
         const updateData = {
             nom: nom?.trim(),
             extensions: extensions?.trim() || null,
@@ -992,29 +997,25 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
 
         if (req.file) {
             const inputPath = req.file.path;
-            const outputName = "jeu_" + safeFileBaseName(nom || "image") + ".jpg";
-            const outputPath = path.join("public/images", outputName);
+            const outputName = `jeu_${safeFileBaseName(nom || "image")}_${Date.now()}.jpg`;
 
-            await sharp(inputPath)
+            const buffer = await sharp(inputPath)
                 .rotate(rotationAngle)
                 .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
                 .jpeg({ quality: 82 })
-                .toFile(outputPath);
+                .toBuffer();
+
+            const { error: uploadError } = await supabase.storage
+                .from("jeux-images")
+                .upload(outputName, buffer, {
+                    contentType: "image/jpeg",
+                    upsert: true
+                });
 
             await fs.unlink(inputPath);
+
+            if (uploadError) throw uploadError;
             updateData.image = outputName;
-        } else if (rotationAngle !== 0 && jeuActuel?.image) {
-            const currentPath = path.join("public/images", jeuActuel.image);
-            const tempPath = path.join("public/images", "tmp_" + jeuActuel.image);
-
-            await sharp(currentPath)
-                .rotate(rotationAngle)
-                .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
-                .jpeg({ quality: 82 })
-                .toFile(tempPath);
-
-            await fs.unlink(currentPath);
-            await fs.rename(tempPath, currentPath);
         }
 
         const { error } = await supabase
@@ -1029,7 +1030,6 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
         res.send(renderPage("Erreur", err.message));
     }
 });
-
 
 // ===================== SUPPRIMER JEU =====================
 app.post("/jeux/supprimer", requireAuth, async (req, res) => {
@@ -1385,11 +1385,26 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
 
         if (joueursError) throw joueursError;
 
+        const ordrePrincipal = ["VINCENT", "MARC", "JULIE"];
+
         const joueurs = [...(joueursBrut || [])].sort((a, b) => {
-            const aBGG = String(a.nom || "").trim().toUpperCase() === "BGG";
-            const bBGG = String(b.nom || "").trim().toUpperCase() === "BGG";
+            const na = String(a.nom || "").trim().toUpperCase();
+            const nb = String(b.nom || "").trim().toUpperCase();
+
+            const aBGG = na === "BGG";
+            const bBGG = nb === "BGG";
             if (aBGG !== bBGG) return aBGG ? 1 : -1;
-            return String(a.nom || "").localeCompare(String(b.nom || ""), "fr", { sensitivity: "base" });
+
+            const ia = ordrePrincipal.indexOf(na);
+            const ib = ordrePrincipal.indexOf(nb);
+
+            const aPrincipal = ia !== -1;
+            const bPrincipal = ib !== -1;
+
+            if (aPrincipal && bPrincipal) return ia - ib;
+            if (aPrincipal !== bPrincipal) return aPrincipal ? -1 : 1;
+
+            return na.localeCompare(nb, "fr", { sensitivity: "base" });
         });
 
         const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
@@ -1974,7 +1989,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
             const resultats = (jeux || []).map(j => ({
                 jeu: j.nom,
-                image: j.image || null,
+                image: j.image ? getGameImageUrl(j.image) : null
                 moyenne: Number(j.bgg_average_rating)
             }));
 
@@ -2037,7 +2052,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
                 if (!stats[jeu.id]) {
                     stats[jeu.id] = {
                         jeu: jeu.nom,
-                        image: jeu.image || null,
+                        image: jeu.image ? getGameImageUrl(jeu.image) : null
                         total: 0,
                         count: 0
                     };
@@ -2049,7 +2064,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
             resultats = Object.values(stats).map(j => ({
                 jeu: j.jeu,
-                image: j.image,
+                image: j.image ? getGameImageUrl(j.image) : null,
                 moyenne: j.total / j.count
             }));
         } else {
@@ -2093,7 +2108,7 @@ app.get("/filtrages", requireAuth, async (req, res) => {
             <div class="result-box" style="margin-bottom:12px;">
               <h3 style="margin-top:0;">🎲 Suggestion du moment</h3>
               <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-                ${suggestion.image ? `<img src="/images/${encodeURIComponent(suggestion.image)}" width="90">` : ""}
+                ${suggestion.image ? `<img src="${getGameImageUrl(suggestion.image)}" width="90">` : ""}
                 <div style="font-size:1.1em; color:#1b8f3a;"><b>${escapeHtml(suggestion.nom)}</b></div>
               </div>
             </div>
