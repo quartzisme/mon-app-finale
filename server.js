@@ -1989,7 +1989,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
             const resultats = (jeux || []).map(j => ({
                 jeu: j.nom,
-                image: j.image ? getGameImageUrl(j.image) : null
+                image: j.image ? getGameImageUrl(j.image) : null,
                 moyenne: Number(j.bgg_average_rating)
             }));
 
@@ -2034,7 +2034,6 @@ app.get("/api/stats", requireAuth, async (req, res) => {
                 s => String(s.joueurs?.nom || "").trim().toUpperCase() === "BGG"
             );
         }
-        // all_with_bgg = on garde tout
 
         if (!scoresFiltres.length) {
             return res.json({ meilleurs: [], pires: [] });
@@ -2052,7 +2051,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
                 if (!stats[jeu.id]) {
                     stats[jeu.id] = {
                         jeu: jeu.nom,
-                        image: jeu.image ? getGameImageUrl(jeu.image) : null
+                        image: jeu.image ? getGameImageUrl(jeu.image) : null,
                         total: 0,
                         count: 0
                     };
@@ -2064,7 +2063,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
             resultats = Object.values(stats).map(j => ({
                 jeu: j.jeu,
-                image: j.image ? getGameImageUrl(j.image) : null,
+                image: j.image ? j.image : null,
                 moyenne: j.total / j.count
             }));
         } else {
@@ -2072,7 +2071,7 @@ app.get("/api/stats", requireAuth, async (req, res) => {
                 .filter(s => s.jeux?.nom)
                 .map(s => ({
                     jeu: s.jeux.nom,
-                    image: s.jeux.image || null,
+                    image: s.jeux.image ? getGameImageUrl(s.jeux.image) : null,
                     moyenne: Number(s.score)
                 }));
         }
