@@ -1175,6 +1175,18 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
                         <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
                         <br>
+                        ${j.photo ? `
+                        <form class="inline-form" onsubmit="return false;">
+                        <button
+                            type="button"
+                            style="width:auto;"
+                            onclick="event.stopPropagation(); ouvrirZoomSouvenir('/images/${encodeURIComponent(j.photo)}', '${escapeHtml(j.nom || "")}')"
+                        >
+                            📷 Souvenir
+                        </button>
+                        </form>
+                        &nbsp;
+                        ` : ""}
 
                         <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form">
                         <button type="submit" style="width:auto;">✏ Modifier</button>
@@ -1184,6 +1196,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur ?');">
                         <button type="submit" style="width:auto;">🗑 Supprimer</button>
                         </form>
+
                         ${j.photo ? `
                         &nbsp;
                         <button type="button"
@@ -1266,7 +1279,8 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
 app.get("/joueurs/ajouter", requireAuth, (req, res) => {
     const html = `
-        <h2>Ajouter joueur</h2>
+        <h2>Ajouter un joueur</h2>
+        <div class="result-box">
         <form method="POST" action="/joueurs/ajouter" enctype="multipart/form-data">
             Nom:<br>
             <input name="nom" required><br>
@@ -1282,6 +1296,7 @@ app.get("/joueurs/ajouter", requireAuth, (req, res) => {
 
             <button>Ajouter</button>
         </form>
+        </div>
         <a href="/joueurs/liste">⬅ Retour</a>
     `;
     res.send(renderPage("Ajouter joueur", html));
@@ -2904,7 +2919,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
             joueursParPartie[l.jeu_en_cours_id].push(l.joueurs?.nom || "Joueur");
         });
 
-        const html = `
+        let html = `
         <h2>⏸️ Jeux en cours</h2>
 
         <div class="result-box">
