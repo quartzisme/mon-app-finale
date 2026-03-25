@@ -594,7 +594,7 @@ app.get("/menu", requireAuth, (req, res) => {
             <li class="menu-item"><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
             <li class="menu-item"><a href="/filtrages">🔍 Filtrages</a></li>
             <li class="menu-item"><a href="/competitions/liste">🏆 Compétitions</a></li>
-            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours / Souvenir</a></li>
+            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours</a></li>
             <li class="menu-item"><a href="/jeux-desires">🛒 Jeux désirés</a></li>
             <li class="menu-item"><a href="/logout">⏻ Déconnexion</a></li>
           </div>
@@ -834,7 +834,7 @@ app.get("/jeux/ajouter", requireAuth, (req, res) => {
             <input type="number" name="temps_max" min="0"><br>
 
             Statut:<br>
-            <input name="statut" placeholder="À vendre / Vendu"><br>
+            <input name="statut" placeholder="Ex: À vendre / Vendu"><br>
 
             Rotation de l'image:<br>
             <select name="rotation" style="max-width:120px;">
@@ -1177,14 +1177,22 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <br>
 
                         <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form">
-                          <button type="submit" style="width:auto;">✏ Modifier</button>
+                        <button type="submit" style="width:auto;">✏ Modifier</button>
                         </form>
                         &nbsp;
 
                         <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur ?');">
-                          <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                        <button type="submit" style="width:auto;">🗑 Supprimer</button>
                         </form>
-                      </td>
+                        ${j.photo ? `
+                        &nbsp;
+                        <button type="button"
+                                style="width:auto;"
+                                onclick="ouvrirZoomSouvenir('/images/${encodeURIComponent(j.photo)}', '${escapeHtml(j.nom || "")}'); event.stopPropagation();">
+                        📷 Souvenir
+                        </button>
+                        ` : ""}
+                       </td>
                     </tr>
                   </table>
                 </div>
@@ -1228,6 +1236,20 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
           if (overlay) overlay.classList.remove("show");
         }
 
+        function ouvrirZoomSouvenir(src, nom) {
+        const overlay = document.getElementById("zoomOverlay");
+        const box = document.getElementById("zoomBox");
+        if (!overlay || !box) return;
+
+        box.innerHTML =
+            "<div class='zoomed-player-card'>" +
+            "<img src='" + src + "' alt='Souvenir de " + nom + "'><br>" +
+            "<div class='nom'>Souvenir — " + nom + "</div>" +
+            "</div>";
+
+        overlay.classList.add("show");
+        }
+        
         document.addEventListener("keydown", (e) => {
           if (e.key === "Escape") fermerZoomJoueur();
         });
@@ -1390,7 +1412,7 @@ app.post("/joueurs/supprimer/:id", requireAuth, async (req, res) => {
 // ===================== ROUTES SCORES =====================
 app.get("/scores/ajouter", requireAuth, async (req, res) => {
     try {
-        const { data: jeux, error: jeuxError } = await supabase
+        const { data: jeuxBrut, error: jeuxError } = await supabase
             .from("jeux")
             .select("id, nom, image")
             .order("nom");
@@ -1406,7 +1428,7 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
 
         const ordrePrincipal = ["VINCENT", "MARC", "JULIE"];
 
-        const joueurs = [...(joueursBrut || [])].sort((a, b) => {
+        const joueursTries = [...(joueursBrut || [])].sort((a, b) => {
             const na = String(a.nom || "").trim().toUpperCase();
             const nb = String(b.nom || "").trim().toUpperCase();
 
@@ -1426,10 +1448,20 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
             return na.localeCompare(nb, "fr", { sensitivity: "base" });
         });
 
-        const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
-        const jeuxJson = JSON.stringify(jeux || []).replace(/</g, "\\u003c");
+        const jeux = (jeuxBrut || []).map(j => ({
+            ...j,
+            image_url: j.image ? getGameImageUrl(j.image) : ""
+        }));
 
-const html = `
+        const joueurs = joueursTries.map(j => ({
+            ...j,
+            image_url: j.image ? `/images/${encodeURIComponent(j.image)}` : ""
+        }));
+
+        const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
+        const jeuxJson = JSON.stringify(jeux).replace(/</g, "\\u003c");
+
+        const html = `
 <h2>📊 Ajouter / Modifier un score</h2>
 
 <div class="result-box">
@@ -1481,7 +1513,7 @@ function configurerChampScore() {
     aide.innerHTML = "BGG : décimales libres autorisées (ex. 7,6 ou 7.6).";
   } else {
     inputScore.step = "0.5";
-    inputScore.placeholder = "Ex. 7.5 ou 8.0";
+    inputScore.placeholder = "Ex. 7.5 ou 8";
     aide.innerHTML = "Joueurs : seulement des valeurs en ,0 ou ,5.";
   }
 }
@@ -1498,22 +1530,25 @@ async function majInfosScore() {
 
   if (jeu) {
     try {
-        const jeuInfo = jeuxData.find(x => String(x.id) === String(jeu));
-        const jeuImage = jeuInfo?.image ? getGameImageUrl(jeuInfo.image) : "";
+      const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + encodeURIComponent(jeu));
+      const data1 = await res1.json();
 
-        if (!data1 || data1.length === 0) {
+      const jeuInfo = jeuxData.find(x => String(x.id) === String(jeu));
+      const jeuImage = jeuInfo?.image_url || "";
+
+      if (!data1 || data1.length === 0) {
         divJeu.innerHTML =
-            (jeuImage ? "<img src='" + jeuImage + "' width='70'><br>" : "") +
-            "<b>" + (jeuInfo?.nom || "Jeu") + "</b><br>Aucun score pour ce jeu";
+          (jeuImage ? "<img src='" + jeuImage + "' width='70'><br>" : "") +
+          "<b>" + (jeuInfo?.nom || "Jeu") + "</b><br>Aucun score pour ce jeu";
         divJeu.style.display = "block";
-        } else {
+      } else {
         divJeu.innerHTML =
-            (jeuImage ? "<img src='" + jeuImage + "' width='70'><br>" : "") +
-            "<b>" + (jeuInfo?.nom || "Jeu") + "</b><br><br>" +
-            "<b>Scores existants :</b><br>" +
-            data1.map(s => (s.joueurs?.nom || "Joueur inconnu") + " : " + s.score).join("<br>");
+          (jeuImage ? "<img src='" + jeuImage + "' width='70'><br>" : "") +
+          "<b>" + (jeuInfo?.nom || "Jeu") + "</b><br><br>" +
+          "<b>Scores existants :</b><br>" +
+          data1.map(s => (s.joueurs?.nom || "Joueur inconnu") + " : " + s.score).join("<br>");
         divJeu.style.display = "block";
-        }
+      }
     } catch (e) {
       console.log("Erreur scores jeu", e);
     }
@@ -1524,23 +1559,26 @@ async function majInfosScore() {
 
   if (joueur) {
     try {
-        const joueurInfo = joueursData.find(x => String(x.id) === String(joueur));
-        const joueurImage = joueurInfo?.image ? "/images/" + encodeURIComponent(joueurInfo.image) : "";
+      const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + encodeURIComponent(joueur));
+      const dataJ = await resJ.json();
 
-        if (!dataJ || dataJ.length === 0) {
+      const joueurInfo = joueursData.find(x => String(x.id) === String(joueur));
+      const joueurImage = joueurInfo?.image_url || "";
+
+      if (!dataJ || dataJ.length === 0) {
         divJoueur.style.display = "block";
         divJoueur.innerHTML =
-            (joueurImage ? "<img src='" + joueurImage + "' width='70'><br>" : "") +
-            "<b>" + (joueurInfo?.nom || "Joueur") + "</b><br>" +
-            "<b>Ce joueur n'a encore donné aucun score.</b>";
-        } else {
+          (joueurImage ? "<img src='" + joueurImage + "' width='70'><br>" : "") +
+          "<b>" + (joueurInfo?.nom || "Joueur") + "</b><br>" +
+          "<b>Ce joueur n'a encore donné aucun score.</b>";
+      } else {
         divJoueur.style.display = "block";
         divJoueur.innerHTML =
-            (joueurImage ? "<img src='" + joueurImage + "' width='70'><br>" : "") +
-            "<b>" + (joueurInfo?.nom || "Joueur") + "</b><br><br>" +
-            "<b>Scores de ce joueur :</b><br>" +
-            dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>");
-        }
+          (joueurImage ? "<img src='" + joueurImage + "' width='70'><br>" : "") +
+          "<b>" + (joueurInfo?.nom || "Joueur") + "</b><br><br>" +
+          "<b>Scores de ce joueur :</b><br>" +
+          dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>");
+      }
     } catch (e) {
       console.log("Erreur scores joueur", e);
     }
@@ -2878,12 +2916,14 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                 </select><br>
 
                 Joueurs impliqués:<br>
-                <select name="joueur_ids[]" multiple size="6" style="max-width:400px;" required>
-                    ${(joueurs || []).map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+                <select name="joueur_ids[]" id="joueurs_en_cours" multiple size="6" style="max-width:400px;" required>
+                    ${(joueurs || []).map(j => `<option value="${j.id}" data-nom="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
                 </select><br>
 
                 Tour à quel joueur de jouer:<br>
-                <input name="prochain_joueur" placeholder="Ex. Vincent"><br>               
+                <select name="prochain_joueur" id="prochain_joueur" style="max-width:220px;">
+                    <option value="">-- Choisir --</option>
+                </select><br>            
 
                 Photo:<br>
                 <input type="file" name="photo" accept="image/*"><br>
@@ -2894,7 +2934,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                 <button>Ajouter</button>
             </form>
         </div>
-
+     
         <br>
 
         <div class="table-wrap">
@@ -2930,6 +2970,55 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
 
         <br>
         <a href="/menu">⬅ Retour</a>
+        `;
+
+        html += `
+        <script>
+        document.addEventListener("DOMContentLoaded", function () {
+        const selectJoueurs = document.getElementById("joueurs_en_cours");
+        const selectTour = document.getElementById("prochain_joueur");
+
+        if (!selectJoueurs || !selectTour) return;
+
+        function escapeHtmlJs(str) {
+            return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
+        function majProchainJoueur() {
+            const selectionnes = Array.from(selectJoueurs.selectedOptions).map(function (opt) {
+            return {
+                nom: opt.getAttribute("data-nom") || opt.textContent || ""
+            };
+            });
+
+            const ancienneValeur = selectTour.value;
+
+            let options = "<option value=''>-- Choisir --</option>";
+            selectionnes.forEach(function (j) {
+            const nomSafe = escapeHtmlJs(j.nom);
+            options += "<option value='" + nomSafe + "'>" + nomSafe + "</option>";
+            });
+
+            selectTour.innerHTML = options;
+
+            const existeEncore = selectionnes.some(function (j) {
+            return j.nom === ancienneValeur;
+            });
+
+            if (existeEncore) {
+            selectTour.value = ancienneValeur;
+            }
+        }
+
+        selectJoueurs.addEventListener("change", majProchainJoueur);
+        majProchainJoueur();
+        });
+        </script>
         `;
 
         res.send(renderPage("Jeux en cours", html));
