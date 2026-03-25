@@ -79,6 +79,14 @@ function safeFileBaseName(value = "image") {
         .replace(/^_+|_+$/g, "") || "image";
 }
 
+function formatPrixCAD(value) {
+    if (value === undefined || value === null || value === "") return "—";
+    return Number(value).toLocaleString("fr-CA", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }) + " $";
+}
+
 function getGameImageUrl(filename) {
     if (!filename) return "";
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/jeux-images/${filename}`;
@@ -383,6 +391,14 @@ function renderPage(title, content) {
               box-shadow: 0 10px 20px rgba(0,0,0,0.18);
             }
 
+            .col-center {
+            text-align: center;
+            }
+
+            .col-right {
+            text-align: right;
+            }   
+
             .zoomed-player-card {
               text-align: center;
               padding: 18px;
@@ -550,7 +566,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
-          <div style="color:#666; font-size: 10px;"> ver 1.C</div>
+          <div style="color:#666; font-size: 10px;"> ver 1.D</div>
         </div>
       </form>
     </div>
@@ -586,7 +602,7 @@ app.get("/menu", requireAuth, (req, res) => {
             <li class="menu-item"><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
             <li class="menu-item"><a href="/filtrages">🔍 Filtrages</a></li>
             <li class="menu-item"><a href="/competitions/liste">🏆 Compétitions</a></li>
-            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours</a></li>
+            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours / Souvenir</a></li>
             <li class="menu-item"><a href="/jeux-desires">🛒 Jeux désirés</a></li>
             <li class="menu-item"><a href="/logout">⏻ Déconnexion</a></li>
           </div>
@@ -637,15 +653,15 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         <div class="table-wrap">
           <table class="jeux-table">
             <tr>
-              <th>#</th>
+              <th class="col-center">#</th>
               <th>Image</th>
               <th>Nom</th>
-              <th>🔗 Extensions</th>
-              <th>👥 Joueurs</th>
-              <th>⌛ Temps</th>
-              <th>ℹ️ Statut</th>
-              <th>⬢ BGG</th>
-              <th>⭐ Moyenne</th>
+              <th>Extensions</th>
+              <th class="col-center">Joueurs</th>
+              <th>Temps</th>
+              <th>Statut</th>
+              <th class="col-right">⬢ BGG</th>
+              <th class="col-right">⭐ Moyenne</th>
             </tr>
         `;
 
@@ -667,7 +683,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 (j.extensions || "") + " " +
                 (j.statut || "")
             )}">
-              <td>${index + 1}</td>
+              <td class="col-center">${index + 1}</td>
               <td>${
                   j.image
                       ? `<img src="${imageSrc}" class="game-thumb" width="55" onclick="ouvrirZoomJeu('${imageSrc}', '${escapeHtml(j.nom || "")}')">`
@@ -675,15 +691,15 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               }</td>
               <td><b>${escapeHtml(j.nom || "")}</b></td>
               <td>${escapeHtml(j.extensions || "") || "—"}</td>
-              <td>${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
+              <td class="col-center">${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
               <td>${j.temps_min ?? "—"}-${j.temps_max ?? "—"} min</td>
               <td>${escapeHtml(j.statut || "") || "—"}</td>
-              <td>${
+              <td class="col-right">${
                   j.bgg_average_rating !== null && j.bgg_average_rating !== undefined
                       ? `<span style="color:#1e88e5; font-size:1.15em;">⬢</span> ${j.bgg_average_rating}`
                       : "—"
               }</td>
-              <td><strong>${moyenne}</strong></td>
+              <td class="col-right"><strong>${moyenne}</strong></td>
             </tr>
             `;
         });
@@ -750,6 +766,7 @@ app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) 
             max_joueurs,
             temps_min,
             temps_max,
+            statut,
             bgg_average_rating,
             rotation
         } = req.body;
@@ -787,6 +804,7 @@ app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) 
             max_joueurs: toIntOrNull(max_joueurs),
             temps_min: toIntOrNull(temps_min),
             temps_max: toIntOrNull(temps_max),
+            statut: statut?.trim() || null,
             bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null,
             image
         }]);
@@ -823,19 +841,23 @@ app.get("/jeux/ajouter", requireAuth, (req, res) => {
             Temps max:<br>
             <input type="number" name="temps_max" min="0"><br>
 
+            Statut:<br>
+            <input name="statut" placeholder="À vendre / Vendu"><br>
+
             Rotation de l'image:<br>
             <select name="rotation" style="max-width:120px;">
                 <option value="0">0°</option>
                 <option value="90">90°</option>
                 <option value="180">180°</option>
                 <option value="270">270°</option>
-            </select><br>            
+            </select><br>
+
             Image:<br>
             <input type="file" name="image" accept="image/*"><br><br>
 
             <button>Ajouter</button>
         </form>
-       </div>
+        </div>
 
         <a href="/jeux/liste">⬅ Retour</a>
     `;
@@ -939,7 +961,7 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
           BGG average rating<br>
           <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating" value="${jeu.bgg_average_rating ?? ""}"><br>
 
-          ${jeu.image ? `<div>Image actuelle :<br><img src="/images/${encodeURIComponent(jeu.image)}" width="90"></div><br>` : ""}
+          ${jeu.image ? `<div>Image actuelle :<br><img src="${getGameImageUrl(jeu.image)}" width="90"></div><br>` : ""}
 
           Rotation de l'image:<br>
           <select name="rotation" style="max-width:120px;">
@@ -1105,6 +1127,9 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
             joueurs.map(async (j) => {
                 const isBGG = String(j.nom || "").trim().toUpperCase() === "BGG";
                 const nbScores = j.scores ? j.scores.length : 0;
+                const moyenneGlobale = nbScores
+                    ? (j.scores.reduce((a, b) => a + Number(b.score), 0) / nbScores).toFixed(2)
+                    : "—";               
                 const pourcentage = totalJeux
                     ? Math.round((nbScores / totalJeux) * 100)
                     : 0;
@@ -1154,6 +1179,8 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
                       <td style="vertical-align:top;">
                         <b>🧩 Jeux évalués :</b> ${nbScores} (${pourcentage}%)
+                        <div><b><span style="color:#FFD700; font-size:1.2em;">x̄</span> Moyenne des scores :</b> ${moyenneGlobale}</div>
+
                         <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
                         <br>
 
@@ -1373,14 +1400,14 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
     try {
         const { data: jeux, error: jeuxError } = await supabase
             .from("jeux")
-            .select("id, nom")
+            .select("id, nom, image")
             .order("nom");
 
         if (jeuxError) throw jeuxError;
 
         const { data: joueursBrut, error: joueursError } = await supabase
             .from("joueurs")
-            .select("id, nom")
+            .select("id, nom, image")
             .order("nom");
 
         if (joueursError) throw joueursError;
@@ -1408,6 +1435,7 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
         });
 
         const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
+        const jeuxJson = JSON.stringify(jeux || []).replace(/</g, "\\u003c");
 
 const html = `
 <h2>📊 Ajouter / Modifier un score</h2>
@@ -1443,6 +1471,7 @@ ${joueurs.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join
 
 <script>
 const joueursData = ${joueursJson};
+const jeuxData = ${jeuxJson};
 
 function joueurEstBGG(joueurId) {
   const j = joueursData.find(x => String(x.id) === String(joueurId));
@@ -1477,18 +1506,22 @@ async function majInfosScore() {
 
   if (jeu) {
     try {
-      const res1 = await fetch('/api/scores-par-jeu?jeu_id=' + encodeURIComponent(jeu));
-      const data1 = await res1.json();
+        const jeuInfo = jeuxData.find(x => String(x.id) === String(jeu));
+        const jeuImage = jeuInfo?.image ? getGameImageUrl(jeuInfo.image) : "";
 
-      if (!data1 || data1.length === 0) {
-        divJeu.innerHTML = "Aucun score pour ce jeu";
-        divJeu.style.display = "block";
-      } else {
+        if (!data1 || data1.length === 0) {
         divJeu.innerHTML =
-          "<b>Scores existants :</b><br>" +
-          data1.map(s => (s.joueurs?.nom || "Joueur inconnu") + " : " + s.score).join("<br>");
+            (jeuImage ? "<img src='" + jeuImage + "' width='70'><br>" : "") +
+            "<b>" + (jeuInfo?.nom || "Jeu") + "</b><br>Aucun score pour ce jeu";
         divJeu.style.display = "block";
-      }
+        } else {
+        divJeu.innerHTML =
+            (jeuImage ? "<img src='" + jeuImage + "' width='70'><br>" : "") +
+            "<b>" + (jeuInfo?.nom || "Jeu") + "</b><br><br>" +
+            "<b>Scores existants :</b><br>" +
+            data1.map(s => (s.joueurs?.nom || "Joueur inconnu") + " : " + s.score).join("<br>");
+        divJeu.style.display = "block";
+        }
     } catch (e) {
       console.log("Erreur scores jeu", e);
     }
@@ -1499,18 +1532,23 @@ async function majInfosScore() {
 
   if (joueur) {
     try {
-      const resJ = await fetch('/api/scores-par-joueur?joueur_id=' + encodeURIComponent(joueur));
-      const dataJ = await resJ.json();
+        const joueurInfo = joueursData.find(x => String(x.id) === String(joueur));
+        const joueurImage = joueurInfo?.image ? "/images/" + encodeURIComponent(joueurInfo.image) : "";
 
-      if (!dataJ || dataJ.length === 0) {
-        divJoueur.style.display = "block";
-        divJoueur.innerHTML = "<b>Ce joueur n'a encore donné aucun score.</b>";
-      } else {
+        if (!dataJ || dataJ.length === 0) {
         divJoueur.style.display = "block";
         divJoueur.innerHTML =
-          "<b>Scores de ce joueur :</b><br>" +
-          dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>");
-      }
+            (joueurImage ? "<img src='" + joueurImage + "' width='70'><br>" : "") +
+            "<b>" + (joueurInfo?.nom || "Joueur") + "</b><br>" +
+            "<b>Ce joueur n'a encore donné aucun score.</b>";
+        } else {
+        divJoueur.style.display = "block";
+        divJoueur.innerHTML =
+            (joueurImage ? "<img src='" + joueurImage + "' width='70'><br>" : "") +
+            "<b>" + (joueurInfo?.nom || "Joueur") + "</b><br><br>" +
+            "<b>Scores de ce joueur :</b><br>" +
+            dataJ.map(s => (s.jeux?.nom || "Jeu inconnu") + " : " + s.score).join("<br>");
+        }
     } catch (e) {
       console.log("Erreur scores joueur", e);
     }
@@ -2108,7 +2146,7 @@ app.get("/filtrages", requireAuth, async (req, res) => {
               <h3 style="margin-top:0;">🎲 Suggestion du moment</h3>
               <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
                 ${suggestion.image ? `<img src="${getGameImageUrl(suggestion.image)}" width="90">` : ""}
-                <div style="font-size:1.1em; color:#1b8f3a;"><b>${escapeHtml(suggestion.nom)}</b></div>
+              <div style="font-size:1.1em; color:#1b8f3a;"><b>${escapeHtml(suggestion.nom)}</b></div>
               </div>
             </div>
             `
@@ -2852,6 +2890,9 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                     ${(joueurs || []).map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
                 </select><br>
 
+                Tour à quel joueur de jouer:<br>
+                <input name="prochain_joueur" placeholder="Ex. Vincent"><br>               
+
                 Photo:<br>
                 <input type="file" name="photo" accept="image/*"><br>
 
@@ -2871,6 +2912,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                     <th>⚔️ Jeu</th>
                     <th>👥 Joueurs</th>
                     <th>⌛ Date</th>
+                    <th>↻ Tour</th>
                     <th>📷 Photo</th>
                     <th>ℹ️ Notes</th>
                     <th>⚡ Action</th>
@@ -2881,6 +2923,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                         <td>${escapeHtml(p.nom_jeu)}</td>
                         <td>${(joueursParPartie[p.id] || []).join(", ") || "—"}</td>
                         <td>${new Date(p.date_creation).toLocaleDateString("fr-CA")}</td>
+                        <td>${escapeHtml(p.prochain_joueur || "") || "—"}</td>
                         <td>${p.photo ? `<img src="/images/${encodeURIComponent(p.photo)}" width="70">` : "—"}</td>
                         <td>${escapeHtml(p.notes || "")}</td>
                         <td>
@@ -2907,6 +2950,7 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
     try {
         const nom_jeu = (req.body.nom_jeu || "").trim();
         const notes = (req.body.notes || "").trim() || null;
+        const prochain_joueur = (req.body.prochain_joueur || "").trim() || null;       
 
         let joueur_ids = req.body["joueur_ids[]"] || req.body.joueur_ids || [];
         if (!Array.isArray(joueur_ids)) joueur_ids = [joueur_ids];
@@ -2916,7 +2960,8 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
 
         const { data: partie, error } = await supabase
             .from("jeux_en_cours")
-            .insert([{ nom_jeu, photo, notes }])
+            const notes = (req.body.notes || "").trim() || null;
+            const prochain_joueur = (req.body.prochain_joueur || "").trim() || null;
             .select()
             .single();
 
@@ -2981,6 +3026,9 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 Extension:<br>
                 <input name="extension"><br>
 
+                Quelle source (magasin):<br>
+                <input name="source_magasin"><br>
+
                 Prix d'achat:<br>
                 <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="20.00"><br>
                 <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div><br>
@@ -2997,19 +3045,21 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
         <div class="table-wrap">
             <table class="jeux-table">
                 <tr>
-                    <th>#</th>
+                    <th class="col-center">#</th>
                     <th>Nom</th>
                     <th>Extension</th>
-                    <th>Prix d'achat</th>
+                    <th>Source</th>
+                    <th class="col-right">Prix d'achat</th>
                     <th>Notes</th>
                     <th>Action</th>
                 </tr>
                 ${(jeux || []).map((j, index) => `
                     <tr>
-                        <td>${index + 1}</td>
+                        <td class="col-center">${index + 1}</td>
                         <td>${escapeHtml(j.nom)}</td>
                         <td>${escapeHtml(j.extension || "") || "—"}</td>
-                        <td>${formatPrixCAD(j.prix_achat)}</td>
+                        <td>${escapeHtml(j.source_magasin || "") || "—"}</td>
+                        <td class="col-right">${formatPrixCAD(j.prix_achat)}</td>
                         <td>${escapeHtml(j.notes || "")}</td>
                         <td>
                             <form method="POST" action="/jeux-desires/supprimer/${j.id}" onsubmit="return confirm('Supprimer ce jeu désiré ?');">
@@ -3035,6 +3085,7 @@ app.post("/jeux-desires/ajouter", requireAuth, async (req, res) => {
     try {
         const nom = (req.body.nom || "").trim();
         const extension = (req.body.extension || "").trim() || null;
+        const source_magasin = (req.body.source_magasin || "").trim() || null;
         const notes = (req.body.notes || "").trim() || null;
         const prix_achat = req.body.prix_achat
             ? Number(String(req.body.prix_achat).replace(",", "."))
@@ -3049,6 +3100,7 @@ app.post("/jeux-desires/ajouter", requireAuth, async (req, res) => {
             .insert([{
                 nom,
                 extension,
+                source_magasin,
                 prix_achat,
                 notes
             }]);
