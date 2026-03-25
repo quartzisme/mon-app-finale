@@ -428,25 +428,52 @@ function renderPage(title, content) {
 // ===================== LOGIN =====================
 app.get("/", (req, res) => {
     const html = `
-    <audio id="music" autoplay loop>
+    <audio id="music" autoplay loop preload="auto" playsinline>
       <source src="/sounds/sound.mp3" type="audio/mpeg">
     </audio>
 
     <script>
-      window.addEventListener("load", () => {
+      function demarrerMusique() {
         const music = document.getElementById("music");
         if (!music) return;
+
+        const musiqueCoupee = localStorage.getItem("musicMuted") === "true";
+        music.muted = musiqueCoupee;
+
+        if (musiqueCoupee) {
+          const btn = document.getElementById("music-toggle");
+          if (btn) btn.textContent = "🔇";
+          return;
+        }
 
         const playPromise = music.play();
 
         if (playPromise !== undefined) {
-          playPromise.catch(() => {
-            const demarrer = () => music.play().catch(() => {});
-            document.body.addEventListener("click", demarrer, { once: true });
-            document.body.addEventListener("touchstart", demarrer, { once: true });
+          playPromise.then(() => {
+            retirerEcouteursDemarrage();
+          }).catch(() => {
+            installerEcouteursDemarrage();
           });
         }
-      });
+      }
+
+      function installerEcouteursDemarrage() {
+        document.addEventListener("click", demarrerApresInteraction, { once: true });
+        document.addEventListener("touchstart", demarrerApresInteraction, { once: true });
+        document.addEventListener("keydown", demarrerApresInteraction, { once: true });
+      }
+
+      function retirerEcouteursDemarrage() {
+        document.removeEventListener("click", demarrerApresInteraction);
+        document.removeEventListener("touchstart", demarrerApresInteraction);
+        document.removeEventListener("keydown", demarrerApresInteraction);
+      }
+
+      function demarrerApresInteraction() {
+        const music = document.getElementById("music");
+        if (!music) return;
+        music.play().catch(() => {});
+      }
 
       function togglePassword() {
         const p = document.getElementById("password");
@@ -467,8 +494,21 @@ app.get("/", (req, res) => {
         if (!music || !btn) return;
 
         music.muted = !music.muted;
+        localStorage.setItem("musicMuted", music.muted ? "true" : "false");
         btn.textContent = music.muted ? "🔇" : "🔊";
+
+        if (!music.muted) {
+          music.play().catch(() => {});
+        }
       }
+
+      window.addEventListener("load", () => {
+        demarrerMusique();
+      });
+
+      window.addEventListener("pageshow", () => {
+        demarrerMusique();
+      });
     </script>
 
     <style>
@@ -634,6 +674,10 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
 
         let html = `
         <h2>⚔️ Liste des jeux</h2>
+           <b>🎲 Nombre de jeux :</b> ${nbJeux}
+        <div class="result-box">
+                   
+        </div>
 
         <button onclick="window.location.href='/jeux/ajouter'">Ajouter un jeu</button><br>
         <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br><br>
@@ -1171,7 +1215,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
                       <td style="vertical-align:top;">
                         <b>🧩 Jeux évalués :</b> ${nbScores} (${pourcentage}%)
-                        <div><b><span style="color:#FFD700; font-size:1.2em;">x̄</span> Moyenne des scores :</b> ${moyenneGlobale}</div>
+                        <div><b><span style="color:#FFD700; font-size:1.2em;">x̄</span> Moyenne des scores donnés :</b> ${moyenneGlobale}</div>
 
                         <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
                         <br>
@@ -1199,11 +1243,6 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
                         ${j.photo ? `
                         &nbsp;
-                        <button type="button"
-                                style="width:auto;"
-                                onclick="ouvrirZoomSouvenir('/images/${encodeURIComponent(j.photo)}', '${escapeHtml(j.nom || "")}'); event.stopPropagation();">
-                        📷 Souvenir
-                        </button>
                         ` : ""}
                        </td>
                     </tr>
@@ -3125,7 +3164,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 <input name="source_magasin"><br>
 
                 Prix d'achat:<br>
-                <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="20.00"><br>
+                <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="0.00"><br>
                 <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div><br>
 
                 Notes:<br>
