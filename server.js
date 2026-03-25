@@ -558,7 +558,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
-          <div style="color:#666; font-size: 10px;"> ver 1.D</div>
+          <div style="color:#666; font-size: 10px;"> ver 20260325b</div>
         </div>
       </form>
     </div>
@@ -2942,7 +2942,7 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
     try {
         const nom_jeu = (req.body.nom_jeu || "").trim();
         const notes = (req.body.notes || "").trim() || null;
-        const prochain_joueur = (req.body.prochain_joueur || "").trim() || null;       
+        const prochain_joueur = (req.body.prochain_joueur || "").trim() || null;
 
         let joueur_ids = req.body["joueur_ids[]"] || req.body.joueur_ids || [];
         if (!Array.isArray(joueur_ids)) joueur_ids = [joueur_ids];
@@ -2952,8 +2952,7 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
 
         const { data: partie, error } = await supabase
             .from("jeux_en_cours")
-            const notes = (req.body.notes || "").trim() || null;
-            const prochain_joueur = (req.body.prochain_joueur || "").trim() || null;
+            .insert([{ nom_jeu, photo, notes, prochain_joueur }])
             .select()
             .single();
 
