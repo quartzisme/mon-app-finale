@@ -92,14 +92,6 @@ function getGameImageUrl(filename) {
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/jeux-images/${filename}`;
 }
 
-function formatPrixCAD(value) {
-    if (value === undefined || value === null || value === "") return "—";
-    return Number(value).toLocaleString("fr-CA", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }) + " $";
-}
-
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, "public/images"),
     filename: (req, file, cb) => {
