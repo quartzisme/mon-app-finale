@@ -89,7 +89,7 @@ function formatPrixCAD(value) {
 
 function getGameImageUrl(filename) {
     if (!filename) return "";
-    return `${process.env.SUPABASE_URL}/storage/v1/object/public/jeux-images/${filename}`;
+    return `${process.env.SUPABASE_URL}/storage/v1/object/public/jeux-images/${encodeURIComponent(filename)}`;
 }
 
 const storage = multer.diskStorage({
@@ -678,13 +678,14 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         <h2>⚔️ Liste des jeux</h2>
 
         <div class="result-box">
-          <b>🎲 Nombre de jeux :</b> ${nbJeux}
+          <b>🎲 Nombre de jeux total :</b> ${nbJeux}
         </div>
 
         <button onclick="window.location.href='/jeux/ajouter'">Ajouter un jeu</button><br>
         <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br><br>
-
-        <input id="rechercheJeu" placeholder="Rechercher un jeu..." style="max-width:300px;"><br><br>
+        <div class="result-box">
+            <input id="rechercheJeu" placeholder="Rechercher un jeu..." style="max-width:300px;"><br><br>
+        </div>
 
         <a href="/menu">⬅ Retour</a><br><br>
 
@@ -702,6 +703,45 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               <th class="col-right">⭐ Moyenne</th>
             </tr>
         `;
+
+        (jeux || []).forEach((j, index) => {
+            let moyenne = "—";
+
+            if (j.scores && j.scores.length > 0) {
+                const avg =
+                    j.scores.reduce((a, b) => a + Number(b.score), 0) /
+                    j.scores.length;
+                moyenne = avg.toFixed(2);
+            }
+
+            const imageSrc = "";
+
+            html += `
+            <tr data-jeu="${escapeHtml(
+                (j.nom || "") + " " +
+                (j.extensions || "") + " " +
+                (j.statut || "")
+            )}">
+              <td class="col-center">${index + 1}</td>
+              <td>${
+                  j.image
+                      ? `<img src="${imageSrc}" class="game-thumb" width="55" onclick="ouvrirZoomJeu('${imageSrc}', '${escapeHtml(j.nom || "")}')">`
+                      : "—"
+              }</td>
+              <td><b>${escapeHtml(j.nom || "")}</b></td>
+              <td>${escapeHtml(j.extensions || "") || "—"}</td>
+              <td class="col-center">${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
+              <td>${j.temps_min ?? "—"}-${j.temps_max ?? "—"} min</td>
+              <td>${escapeHtml(j.statut || "") || "—"}</td>
+              <td class="col-right">${
+                  j.bgg_average_rating !== null && j.bgg_average_rating !== undefined
+                      ? `<span style="color:#1e88e5; font-size:1.15em;">⬢</span> ${j.bgg_average_rating}`
+                      : "—"
+              }</td>
+              <td class="col-right"><strong>${moyenne}</strong></td>
+            </tr>
+            `;
+        });        
 
         html += `
           </table>
@@ -754,7 +794,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
-}); 
+});
 
 // ===================== AJOUTER JEU =====================
 app.post("/jeux/ajouter", requireAuth, upload.single("image"), async (req, res) => {
