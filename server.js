@@ -724,7 +724,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               <th>⌛ Temps (min)</th>
               <th>ℹ️ Statut</th>
               <th><span style="color:#1e88e5; font-size:1.15em;">⬢</span><br>BGG</th>
-              <th class="col-right">⭐ Moyenne</th>
+              <th>⭐ Moyenne</th>
             </tr>
         `;
 
@@ -738,7 +738,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 moyenne = avg.toFixed(2);
             }
 
-            const imageSrc = "";
+            const imageSrc = j.image ? getLocalImageUrl(j.image) : "";
 
             html += `
             <tr data-jeu="${escapeHtml(
@@ -2984,36 +2984,6 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
         let html = `
         <h2>⏸️ Jeux en cours</h2>
 
-        <div class="result-box">
-            <form method="POST" action="/jeux-en-cours/ajouter" enctype="multipart/form-data">
-                Jeu:<br>
-                <select name="nom_jeu" required>
-                    <option value="">-- Choisir un jeu --</option>
-                    ${(jeux || []).map(j => `<option value="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
-                </select><br>
-
-                Joueurs impliqués:<br>
-                <select name="joueur_ids[]" id="joueurs_en_cours" multiple size="6" style="max-width:400px;" required>
-                    ${(joueurs || []).map(j => `<option value="${j.id}" data-nom="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
-                </select><br>
-
-                Tour à quel joueur de jouer:<br>
-                <select name="prochain_joueur" id="prochain_joueur" style="max-width:220px;">
-                    <option value="">-- Choisir --</option>
-                </select><br>            
-
-                Photo:<br>
-                <input type="file" name="photo" accept="image/*"><br>
-
-                Notes:<br>
-                <textarea name="notes" rows="4"></textarea><br><br>
-
-                <button>Ajouter</button>
-            </form>
-        </div>
-     
-        <br>
-
         <div class="table-wrap">
             <table class="jeux-table">
                 <tr>
@@ -3044,8 +3014,38 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                 `).join("")}
             </table>
         </div>
-
         <br>
+
+        <div class="result-box">
+            <form method="POST" action="/jeux-en-cours/ajouter" enctype="multipart/form-data">
+                Jeu:<br>
+                <select name="nom_jeu" required>
+                    <option value="">-- Choisir un jeu --</option>
+                    ${(jeux || []).map(j => `<option value="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br>
+
+                Joueurs impliqués:<br>
+                <select name="joueur_ids[]" id="joueurs_en_cours" multiple size="6" style="max-width:400px;" required>
+                    ${(joueurs || []).map(j => `<option value="${j.id}" data-nom="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br>
+
+                Tour à quel joueur de jouer:<br>
+                <select name="prochain_joueur" id="prochain_joueur" style="max-width:220px;">
+                    <option value="">-- Choisir --</option>
+                </select><br>            
+
+                Photo:<br>
+                <input type="file" name="photo" accept="image/*"><br>
+
+                Notes:<br>
+                <textarea name="notes" rows="4"></textarea><br><br>
+
+                <button>Ajouter</button>
+            </form>
+        </div>
+     
+        <br>
+
         <a href="/menu">⬅ Retour</a>
         `;
 
