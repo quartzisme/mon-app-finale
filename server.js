@@ -92,8 +92,32 @@ function getGameImageUrl(filename) {
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/jeux-images/${encodeURIComponent(filename)}`;
 }
 
+function encodePathPreserveSlashes(relPath = "") {
+    return String(relPath)
+        .split("/")
+        .map(part => encodeURIComponent(part))
+        .join("/");
+}
+
+function getLocalImageUrl(relPath = "") {
+    if (!relPath) return "";
+    return `/images/${encodePathPreserveSlashes(relPath)}`;
+}
+
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, "public/images"),
+    destination: (req, file, cb) => {
+        let folder = "public/images";
+
+        if (req.originalUrl.startsWith("/joueurs")) {
+            if (file.fieldname === "image") folder = "public/images/joueurs";
+            if (file.fieldname === "photo") folder = "public/images/photos";
+        } else if (req.originalUrl.startsWith("/jeux")) {
+            folder = "public/images/jeux";
+        }
+
+        cb(null, folder);
+    },
+
     filename: (req, file, cb) => {
         const baseRaw = req.body.nom || req.body.nom_jeu || "image";
         const base = safeFileBaseName(baseRaw);
@@ -684,7 +708,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
         <button onclick="window.location.href='/jeux/ajouter'">Ajouter un jeu</button><br>
         <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br>
         <div class="result-box">
-            <input id="rechercheJeu" placeholder="Rechercher un jeu..." style="max-width:300px;"><br>
+            <input id="rechercheJeu" placeholder="🔎 Rechercher un jeu..." style="max-width:300px;"><br>
         </div>
 
         <a href="/menu">⬅ Retour</a><br><br>
@@ -698,8 +722,8 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               <th>🔗 Extensions</th>
               <th class="col-center">👥 Joueurs</th>
               <th>⌛ Temps (min)</th>
-              <th>Statut</th>
-              <th><span style="color:#1e88e5; font-size:1.15em;">⬢</span>BGG</th>
+              <th>ℹ️ Statut</th>
+              <th><span style="color:#1e88e5; font-size:1.15em;">⬢</span><br>BGG</th>
               <th class="col-right">⭐ Moyenne</th>
             </tr>
         `;
@@ -1193,7 +1217,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                     bestJeuHTML = meilleurs.join(", ");
                 }
 
-                const imageSrc = j.image ? `/images/${encodeURIComponent(j.image)}` : "";
+                const imageSrc = j.image ? getLocalImageUrl(j.image) : "";
                 const nomSafe = escapeHtml(j.nom || "");
                 const etoilesTexte = isBGG ? "" : `⭐ ${j.etoiles || 0}`;
 
@@ -1224,7 +1248,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <button
                             type="button"
                             style="width:auto;"
-                            onclick="event.stopPropagation(); ouvrirZoomSouvenir('/images/${encodeURIComponent(j.photo)}', '${escapeHtml(j.nom || "")}')"
+                            onclick="event.stopPropagation(); ouvrirZoomSouvenir('${getLocalImageUrl(j.photo)}', '${escapeHtml(j.nom || "")}')"
                         >
                             📷 Souvenir
                         </button>
@@ -1255,7 +1279,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         const html = `
         <h2>👥 Gestion des joueurs</h2>
         <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button><br>
-        <br><br>
+        <br>
 
         ${rows.join("")}
 
@@ -1349,8 +1373,8 @@ app.post("/joueurs/ajouter", requireAuth, upload.fields([
         const nom = req.body.nom;
         const etoiles = req.body.etoiles ? parseInt(req.body.etoiles, 10) : null;
 
-        const image = req.files?.image?.[0]?.filename || null;
-        const photo = req.files?.photo?.[0]?.filename || null;
+        const image = req.files?.image?.[0] ? `joueurs/${req.files.image[0].filename}` : null;
+        const photo = req.files?.photo?.[0] ? `photos/${req.files.photo[0].filename}` : null;
 
         const { error } = await supabase
             .from("joueurs")
@@ -1418,13 +1442,13 @@ app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
 
         let updateData = { nom, etoiles };
 
-        if (req.files?.image?.[0]) {
-            updateData.image = req.files.image[0].filename;
-        }
+            if (req.files?.image?.[0]) {
+                updateData.image = `joueurs/${req.files.image[0].filename}`;
+            }
 
-        if (req.files?.photo?.[0]) {
-            updateData.photo = req.files.photo[0].filename;
-        }
+            if (req.files?.photo?.[0]) {
+                updateData.photo = `photos/${req.files.photo[0].filename}`;
+            }
 
         const { error } = await supabase
             .from("joueurs")
@@ -2251,9 +2275,9 @@ app.get("/filtrages", requireAuth, async (req, res) => {
 
             <label>⌛ Temps maximum :</label>
             <input type="number" name="tempsmax" min="0" style="width:110px;">
-            <label>(minutes)</label><br>
+            <label>(min.)</label><br>
 
-            <label>⭐ Score moyen minimum des joueurs :</label>
+            <label>⭐ Score moyen minimum (joueurs) :</label>
             <input type="number" step="0.1" name="scoremin" min="0" style="width:90px;"><br>
 
             <label><span style="color:#1e88e5; font-size:1.2em;">⬢</span> Score moyen minimum BGG :</label>
@@ -2319,9 +2343,9 @@ app.get("/filtrages", requireAuth, async (req, res) => {
                     "<th>👥 Joueurs</th>" +
                     "<th>⌛ Temps</th>" +
                     "<th>⭐ Local</th>" +
-                    "<th><span style='color:#1e88e5; font-size:1.25em;'>⬢</span> BGG</th>" +
-                    "<th>ℹ️ Status</th>" +
+                     "<th>ℹ️ Status</th>" +
                     "<th>🔗 Extension</th>" +
+                    "<th><span style='color:#1e88e5; font-size:1.25em;'>⬢</span> BGG</th>" +
                     "<th>⭐ Scores</th>" +
                   "</tr>" +
                   data.map(j =>
@@ -2358,7 +2382,6 @@ app.get("/filtrages", requireAuth, async (req, res) => {
 
 // ===================== ROUTES COMPÉTITIONS =====================
 
-// LISTE
 app.get("/competitions/liste", requireAuth, async (req, res) => {
     try {
         const playWin = req.query.win === "1";
@@ -2482,7 +2505,7 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                                 <div>
                                     <div><b>${escapeHtml(p.joueurs?.nom || "Joueur inconnu")}</b></div>
                                     <div>
-                                        Victoires : ${p.victoires} / ${c.victoires_pour_gagner}
+                                        Gains : ${p.victoires} / ${c.victoires_pour_gagner}
                                         <span style="font-size:22px; margin-left:8px; color:${estGagnant ? "#c97a00" : "#1e88e5"};">
                                             ${gradateur(p.victoires)}
                                         </span>
@@ -2995,9 +3018,9 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
             <table class="jeux-table">
                 <tr>
                     <th>#</th>
+                    <th>⌛ Date</th>
                     <th>⚔️ Jeu</th>
                     <th>👥 Joueurs</th>
-                    <th>⌛ Date</th>
                     <th>↻ Tour</th>
                     <th>📷 Photo</th>
                     <th>ℹ️ Notes</th>
@@ -3150,33 +3173,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
         const html = `
         <h2>🛒 Jeux désirés</h2>
 
-        <div class="box-info">
-            <h3>➕ Ajouter un jeu désiré</h3>
-
-            <form method="POST" action="/jeux-desires/ajouter">
-                Nom du jeu:<br>
-                <input name="nom" required><br>
-
-                Extension:<br>
-                <input name="extension"><br>
-
-                Quelle source (magasin):<br>
-                <input name="source_magasin"><br>
-
-                Prix d'achat:<br>
-                <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="0.00"><br>
-                <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div><br>
-
-                Notes:<br>
-                <textarea name="notes" rows="4"></textarea><br><br>
-
-                <button>Ajouter</button>
-            </form>
-        </div>
-
-        <br>
-
-        <div class="table-wrap">
+                <div class="table-wrap">
             <table class="jeux-table">
                 <tr>
                     <th class="col-center">#</th>
@@ -3206,6 +3203,33 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
         </div>
 
         <br>
+
+        <div class="box-info">
+            <h3>➕ Ajouter un jeu désiré</h3>
+
+            <form method="POST" action="/jeux-desires/ajouter">
+                Nom du jeu:<br>
+                <input name="nom" required><br>
+
+                Extension:<br>
+                <input name="extension"><br>
+
+                Quelle source (magasin):<br>
+                <input name="source_magasin"><br>
+
+                Prix d'achat:<br>
+                <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="0.00"><br>
+                <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div><br>
+
+                Notes:<br>
+                <textarea name="notes" rows="4"></textarea><br><br>
+
+                <button>Ajouter</button>
+            </form>
+        </div>
+
+        <br>
+
         <a href="/menu">⬅ Retour</a>
         `;
 
