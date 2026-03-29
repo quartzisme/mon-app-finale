@@ -747,7 +747,11 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 (j.statut || "")
             )}">
               <td class="col-center">${index + 1}</td>
-              <td>—</td>
+                <td>${
+                    j.image
+                        ? `<img src="${imageSrc}" class="game-thumb" width="55" onclick="ouvrirZoomJeu('${imageSrc}', '${escapeHtml(j.nom || "")}')">`
+                        : "—"
+                }</td>              
               <td><b>${escapeHtml(j.nom || "")}</b></td>
               <td>${escapeHtml(j.extensions || "") || "—"}</td>
               <td class="col-center">${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
