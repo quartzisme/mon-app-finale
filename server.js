@@ -1096,10 +1096,9 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
         const rotationAngle = Number(rotation || 0);
 
         if (req.file) {
-            const inputPath = req.file.path;
             const outputName = `jeu_${safeFileBaseName(nom || "image")}_${Date.now()}.jpg`;
 
-            const buffer = await sharp(inputPath)
+            const buffer = await sharp(req.file.buffer)
                 .rotate(rotationAngle)
                 .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
                 .jpeg({ quality: 82 })
@@ -1111,8 +1110,6 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
                     contentType: "image/jpeg",
                     upsert: true
                 });
-
-            await fs.unlink(inputPath);
 
             if (uploadError) throw uploadError;
             updateData.image = outputName;
@@ -2181,17 +2178,6 @@ app.get("/stats", requireAuth, async (req, res) => {
             return !["VINCENT", "MARC", "JULIE", "BGG"].includes(n);
         });
 
-        const joueursPourSelect = [
-            ...(vincent ? [vincent] : []),
-            ...(marc ? [marc] : []),
-            ...(julie ? [julie] : []),
-            ...autresJoueurs
-        ];
-
-        const optionsJoueurs = joueursPourSelect
-            .map(j => '<option value="' + j.id + '">' + escapeHtml(j.nom) + '</option>')
-            .join("");
-
         const joueursData = JSON.stringify(
             tousLesJoueurs.map(j => ({
                 ...j,
@@ -2258,8 +2244,8 @@ app.get("/stats", requireAuth, async (req, res) => {
             "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px;'>" +
             joueursAAfficher.map(j =>
               "<div class='result-box' style='flex:1 1 180px; max-width:220px; min-width:150px; margin:0; text-align:center;'>" +
-                (j.image_url ? "<img src='" + j.image_url + "' width='80'><br>" : "")
-              "<strong>" + j.nom + "</strong>" +
+                (j.image_url ? "<img src='" + j.image_url + "' width='80'><br>" : "") +
+                "<strong>" + j.nom + "</strong>" +
               "</div>"
             ).join("") +
             "</div>";
@@ -2276,9 +2262,9 @@ app.get("/stats", requireAuth, async (req, res) => {
           } else {
             items.forEach((j, idx) => {
               html += "<div style='display:flex; align-items:center; gap:12px; margin:10px 0;'>";
-                if (j.image) {
+              if (j.image) {
                 html += "<img src='" + j.image + "' width='55'>";
-                }
+              }
               html += "<div>" +
                         "<span style='color:" + rankColor + "; font-weight:bold;'>#" + (idx + 1) + "</span> " +
                         "<b style='color:#000;'>" + j.jeu + "</b><br>" +
