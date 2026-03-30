@@ -748,31 +748,37 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 moyenne = avg.toFixed(2);
             }
 
+            const imageSrc = j.image ? getStorageImageUrl(j.image) : "";
+
             html += `
             <tr data-jeu="${escapeHtml(
                 (j.nom || "") + " " +
                 (j.extensions || "") + " " +
                 (j.statut || "")
             )}">
-              <td class="col-center">${index + 1}</td>
+            <td class="col-center">${index + 1}</td>
             <td>${
                 j.image
-                    ? `
-                    
-            }</td>             
-              <td><b>${escapeHtml(j.nom || "")}</b></td>
-              <td>${escapeHtml(j.extensions || "") || "—"}</td>
-              <td class="col-center">${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
-              <td>${j.temps_min ?? "—"}-${j.temps_max ?? "—"}</td>
-              <td>${escapeHtml(j.statut || "") || "—"}</td>
-              <td class="col-right">${
-                  j.bgg_average_rating !== null && j.bgg_average_rating !== undefined
-                      ? `${j.bgg_average_rating}`
-                      : "—"
-              }</td>
-              <td class="col-right"><strong>${moyenne}</strong></td>
+                    ? `<img src="${imageSrc}"
+                            class="game-thumb"
+                            width="55"
+                            onclick="ouvrirZoomJeu('${imageSrc}', '${escapeHtml(j.nom || "")}')">`
+                    : "—"
+            }</td>
+            <td><b>${escapeHtml(j.nom || "")}</b></td>
+            <td>${escapeHtml(j.extensions || "") || "—"}</td>
+            <td class="col-center">${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
+            <td>${j.temps_min ?? "—"}-${j.temps_max ?? "—"}</td>
+            <td>${escapeHtml(j.statut || "") || "—"}</td>
+            <td class="col-right">${
+                j.bgg_average_rating !== null && j.bgg_average_rating !== undefined
+                    ? `${j.bgg_average_rating}`
+                    : "—"
+            }</td>
+            <td class="col-right"><strong>${moyenne}</strong></td>
             </tr>
             `;
+
         });        
 
         html += `
@@ -1199,9 +1205,11 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
             joueurs.map(async (j) => {
                 const isBGG = String(j.nom || "").trim().toUpperCase() === "BGG";
                 const nbScores = j.scores ? j.scores.length : 0;
+
                 const moyenneGlobale = nbScores
                     ? (j.scores.reduce((a, b) => a + Number(b.score), 0) / nbScores).toFixed(2)
                     : "—";
+
                 const pourcentage = totalJeux
                     ? Math.round((nbScores / totalJeux) * 100)
                     : 0;
@@ -1234,6 +1242,22 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 const nomSafe = escapeHtml(j.nom || "");
                 const etoilesTexte = isBGG ? "" : `⭐ ${j.etoiles || 0}`;
 
+                let souvenirButton = "";
+                if (j.photo) {
+                    souvenirButton = `
+                        <form class="inline-form" onsubmit="return false;">
+                            <button
+                                type="button"
+                                style="width:auto;"
+                                onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${nomSafe}')"
+                            >
+                                📷 Souvenir
+                            </button>
+                        </form>
+                        &nbsp;
+                    `;
+                }
+
                 return `
                 <div class="result-box" style="margin-bottom:15px;">
                   <table style="width:100%;">
@@ -1253,33 +1277,20 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                       <td style="vertical-align:top;">
                         <b>🧩 Jeux évalués :</b> ${nbScores} (${pourcentage}%)
                         <div><b><span style="color:#FFD700; font-size:1.2em;">x̄</span> Moyenne des scores donnés :</b> ${moyenneGlobale}</div>
-
                         <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
                         <br>
-                        ${j.photo ? `
-                        <form class="inline-form" onsubmit="return false;">
-                        <button
-                            type="button"
-                            style="width:auto;"
-                            onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${escapeHtml(j.nom || "")}')"
-                        >
-                            📷 Souvenir
-                        </button>
-                        </form>
-                        &nbsp;
-                        ` : ""}
+
+                        ${souvenirButton}
 
                         <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form">
-                        <button type="submit" style="width:auto;">✏ Modifier</button>
+                          <button type="submit" style="width:auto;">✏ Modifier</button>
                         </form>
                         &nbsp;
 
                         <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur ?');">
-                        <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                          <button type="submit" style="width:auto;">🗑 Supprimer</button>
                         </form>
-
-                        ${j.photo ? `&nbsp;` : ""}
-                       </td>
+                      </td>
                     </tr>
                   </table>
                 </div>
@@ -1329,10 +1340,10 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
           if (!overlay || !box) return;
 
           box.innerHTML =
-              "<div class='zoomed-player-card'>" +
+            "<div class='zoomed-player-card'>" +
               "<img src='" + src + "' alt='Souvenir de " + nom + "'><br>" +
               "<div class='nom'>Souvenir — " + nom + "</div>" +
-              "</div>";
+            "</div>";
 
           overlay.classList.add("show");
         }
