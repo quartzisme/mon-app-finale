@@ -7,7 +7,6 @@ import path, { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 import sharp from "sharp";
-import fs from "fs/promises";
 
 import { supabase } from "./supabaseClient.js";
 
@@ -104,29 +103,40 @@ function getLocalImageUrl(relPath = "") {
     return `/images/${encodePathPreserveSlashes(relPath)}`;
 }
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        let folder = "public/images";
+function getStorageImageUrl(relPath = "") {
+    if (!relPath) return "";
+    return `${process.env.SUPABASE_URL}/storage/v1/object/public/jeux-images/${encodePathPreserveSlashes(relPath)}`;
+}
 
-        if (req.originalUrl.startsWith("/joueurs")) {
-            if (file.fieldname === "image") folder = "public/images/joueurs";
-            if (file.fieldname === "photo") folder = "public/images/photos";
-        } else if (req.originalUrl.startsWith("/jeux")) {
-            folder = "public/images/jeux";
-        }
+async function uploadImageToSupabase(file, folder, baseName, options = {}) {
+    const {
+        width = 600,
+        height = 600,
+        quality = 82,
+        rotation = 0
+    } = options;
 
-        cb(null, folder);
-    },
+    const outputName = `${folder}/${safeFileBaseName(baseName)}_${Date.now()}.jpg`;
 
-    filename: (req, file, cb) => {
-        const baseRaw = req.body.nom || req.body.nom_jeu || "image";
-        const base = safeFileBaseName(baseRaw);
-        const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
-        cb(null, `${base}_${file.fieldname}_${Date.now()}${ext}`);
-    }
-});
+    const buffer = await sharp(file.buffer)
+        .rotate(rotation)
+        .resize({ width, height, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality })
+        .toBuffer();
 
-const upload = multer({ storage });
+    const { error } = await supabase.storage
+        .from("jeux-images")
+        .upload(outputName, buffer, {
+            contentType: "image/jpeg",
+            upsert: true
+        });
+
+    if (error) throw error;
+
+    return outputName;
+}
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.use("/images", express.static(join(__dirname, "public/images")));
 app.use("/sounds", express.static(join(__dirname, "public/sounds")));
@@ -738,8 +748,6 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 moyenne = avg.toFixed(2);
             }
 
-            const imageSrc = j.image ? getLocalImageUrl(j.image) : "";
-
             html += `
             <tr data-jeu="${escapeHtml(
                 (j.nom || "") + " " +
@@ -749,11 +757,8 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               <td class="col-center">${index + 1}</td>
             <td>${
                 j.image
-                    ? `<img src="${getLocalImageUrl(j.image)}"
-                            class="game-thumb"
-                            width="55"
-                            onclick="ouvrirZoomJeu('${getLocalImageUrl(j.image)}', '${escapeHtml(j.nom || "")}')">`
-                    : "—"
+                    ? `
+                    
             }</td>             
               <td><b>${escapeHtml(j.nom || "")}</b></td>
               <td>${escapeHtml(j.extensions || "") || "—"}</td>
@@ -1196,7 +1201,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 const nbScores = j.scores ? j.scores.length : 0;
                 const moyenneGlobale = nbScores
                     ? (j.scores.reduce((a, b) => a + Number(b.score), 0) / nbScores).toFixed(2)
-                    : "—";               
+                    : "—";
                 const pourcentage = totalJeux
                     ? Math.round((nbScores / totalJeux) * 100)
                     : 0;
@@ -1224,7 +1229,8 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                     bestJeuHTML = meilleurs.join(", ");
                 }
 
-                const imageSrc = j.image ? getLocalImageUrl(j.image) : "";
+                const imageSrc = j.image ? getStorageImageUrl(j.image) : "";
+                const photoSrc = j.photo ? getStorageImageUrl(j.photo) : "";
                 const nomSafe = escapeHtml(j.nom || "");
                 const etoilesTexte = isBGG ? "" : `⭐ ${j.etoiles || 0}`;
 
@@ -1255,7 +1261,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <button
                             type="button"
                             style="width:auto;"
-                            onclick="event.stopPropagation(); ouvrirZoomSouvenir('${getLocalImageUrl(j.photo)}', '${escapeHtml(j.nom || "")}')"
+                            onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${escapeHtml(j.nom || "")}')"
                         >
                             📷 Souvenir
                         </button>
@@ -1272,9 +1278,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <button type="submit" style="width:auto;">🗑 Supprimer</button>
                         </form>
 
-                        ${j.photo ? `
-                        &nbsp;
-                        ` : ""}
+                        ${j.photo ? `&nbsp;` : ""}
                        </td>
                     </tr>
                   </table>
@@ -1320,19 +1324,19 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         }
 
         function ouvrirZoomSouvenir(src, nom) {
-        const overlay = document.getElementById("zoomOverlay");
-        const box = document.getElementById("zoomBox");
-        if (!overlay || !box) return;
+          const overlay = document.getElementById("zoomOverlay");
+          const box = document.getElementById("zoomBox");
+          if (!overlay || !box) return;
 
-        box.innerHTML =
-            "<div class='zoomed-player-card'>" +
-            "<img src='" + src + "' alt='Souvenir de " + nom + "'><br>" +
-            "<div class='nom'>Souvenir — " + nom + "</div>" +
-            "</div>";
+          box.innerHTML =
+              "<div class='zoomed-player-card'>" +
+              "<img src='" + src + "' alt='Souvenir de " + nom + "'><br>" +
+              "<div class='nom'>Souvenir — " + nom + "</div>" +
+              "</div>";
 
-        overlay.classList.add("show");
+          overlay.classList.add("show");
         }
-        
+
         document.addEventListener("keydown", (e) => {
           if (e.key === "Escape") fermerZoomJoueur();
         });
@@ -1380,8 +1384,24 @@ app.post("/joueurs/ajouter", requireAuth, upload.fields([
         const nom = req.body.nom;
         const etoiles = req.body.etoiles ? parseInt(req.body.etoiles, 10) : null;
 
-        const image = req.files?.image?.[0] ? `joueurs/${req.files.image[0].filename}` : null;
-        const photo = req.files?.photo?.[0] ? `photos/${req.files.photo[0].filename}` : null;
+        let image = null;
+        let photo = null;
+
+        if (req.files?.image?.[0]) {
+            image = await uploadImageToSupabase(
+                req.files.image[0],
+                "joueurs",
+                `${nom}_carte`
+            );
+        }
+
+        if (req.files?.photo?.[0]) {
+            photo = await uploadImageToSupabase(
+                req.files.photo[0],
+                "photos",
+                `${nom}_souvenir`
+            );
+        }
 
         const { error } = await supabase
             .from("joueurs")
@@ -1395,76 +1415,130 @@ app.post("/joueurs/ajouter", requireAuth, upload.fields([
     }
 });
 
-app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
+app.get("/jeux/modifier", requireAuth, async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = req.query.id;
 
-        const { data: joueur, error } = await supabase
-            .from("joueurs")
+        if (!id) {
+            return res.send(renderPage("Erreur", "Aucun jeu sélectionné."));
+        }
+
+        const { data: jeu, error } = await supabase
+            .from("jeux")
             .select("*")
             .eq("id", id)
             .single();
 
         if (error) throw error;
-        if (!joueur) {
-            return res.send(renderPage("Erreur", "Joueur introuvable."));
+        if (!jeu) {
+            return res.send(renderPage("Erreur", "Jeu introuvable."));
         }
 
         const html = `
-            <h2>Modifier joueur</h2>
-            <div class="result-box">
-            <form method="POST" action="/joueurs/modifier/${id}" enctype="multipart/form-data">
-                Nom:<br>
-                <input name="nom" value="${escapeHtml(joueur.nom || "")}" required><br>
+        <h1>Modifier un jeu</h1>
 
-                ⭐ Étoiles:<br>
-                <input type="number" name="etoiles" value="${joueur.etoiles || 0}"><br>
+        <div class="result-box">
+        <form method="POST" action="/jeux/modifier" enctype="multipart/form-data">
+          <input type="hidden" name="id" value="${jeu.id}">
 
-                Carte du joueur:<br>
-                <input type="file" name="image" accept="image/*"><br>
+          Nom<br>
+          <input name="nom" value="${escapeHtml(jeu.nom || "")}" required><br>
 
-                Photo souvenir:<br>
-                <input type="file" name="photo" accept="image/*"><br><br>
+          Extensions<br>
+          <input name="extensions" value="${escapeHtml(jeu.extensions || "")}"><br>
 
-                <button>Modifier</button>
-            </form>
-            </div>
-            <a href="/joueurs/liste">⬅ Retour</a>
+          Joueurs min<br>
+          <input type="number" name="min_joueurs" min="0" value="${jeu.min_joueurs ?? ""}"><br>
+
+          Joueurs max<br>
+          <input type="number" name="max_joueurs" min="0" value="${jeu.max_joueurs ?? ""}"><br>
+
+          Temps min<br>
+          <input type="number" name="temps_min" min="0" value="${jeu.temps_min ?? ""}"><br>
+
+          Temps max<br>
+          <input type="number" name="temps_max" min="0" value="${jeu.temps_max ?? ""}"><br>
+
+          Statut<br>
+          <input name="statut" value="${escapeHtml(jeu.statut || "")}"><br>
+
+          BGG average rating<br>
+          <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating" value="${jeu.bgg_average_rating ?? ""}"><br>
+
+          ${jeu.image ? `<div>Image actuelle :<br><img src="${getStorageImageUrl(jeu.image)}" width="90"></div><br>` : ""}
+
+          Rotation de l'image:<br>
+          <select name="rotation" style="max-width:120px;">
+              <option value="0">0°</option>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
+          </select><br><br>
+
+          Nouvelle image<br>
+          <input type="file" name="image" accept="image/*"><br><br>
+
+          <button type="submit">Enregistrer</button>
+        </form>
+        </div>
+        <a href="/jeux/liste">⬅ Retour</a>
         `;
 
-        res.send(renderPage("Modifier joueur", html));
+        res.send(renderPage("Modifier jeu", html));
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
 });
 
-    app.post("/joueurs/modifier/:id", requireAuth, upload.fields([
-        { name: "image", maxCount: 1 },
-        { name: "photo", maxCount: 1 }
-    ]), async (req, res) => {
+app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res) => {
     try {
-        const { id } = req.params;
-        const nom = req.body.nom;
-        const etoiles = req.body.etoiles ? parseInt(req.body.etoiles, 10) : null;
+        const {
+            id,
+            nom,
+            extensions,
+            min_joueurs,
+            max_joueurs,
+            temps_min,
+            temps_max,
+            statut,
+            bgg_average_rating,
+            rotation
+        } = req.body;
 
-        let updateData = { nom, etoiles };
+        if (!id) {
+            return res.send(renderPage("Erreur", "ID du jeu manquant."));
+        }
 
-            if (req.files?.image?.[0]) {
-                updateData.image = `joueurs/${req.files.image[0].filename}`;
-            }
+        const updateData = {
+            nom: nom?.trim(),
+            extensions: extensions?.trim() || null,
+            min_joueurs: toIntOrNull(min_joueurs),
+            max_joueurs: toIntOrNull(max_joueurs),
+            temps_min: toIntOrNull(temps_min),
+            temps_max: toIntOrNull(temps_max),
+            statut: statut?.trim() || null,
+            bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null
+        };
 
-            if (req.files?.photo?.[0]) {
-                updateData.photo = `photos/${req.files.photo[0].filename}`;
-            }
+        const rotationAngle = Number(rotation || 0);
+
+        if (req.file) {
+            updateData.image = await uploadImageToSupabase(
+                req.file,
+                "jeux",
+                nom || "image",
+                { width: 200, height: 200, quality: 82, rotation: rotationAngle }
+            );
+        }
 
         const { error } = await supabase
-            .from("joueurs")
+            .from("jeux")
             .update(updateData)
             .eq("id", id);
 
         if (error) throw error;
 
-        res.redirect("/joueurs/liste");
+        res.redirect("/jeux/liste");
     } catch (err) {
         res.send(renderPage("Erreur", err.message));
     }
@@ -1535,12 +1609,12 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
 
         const jeux = (jeuxBrut || []).map(j => ({
             ...j,
-            image_url: j.image ? getGameImageUrl(j.image) : ""
+            image_url: j.image ? getStorageImageUrl(j.image) : ""
         }));
 
         const joueurs = joueursTries.map(j => ({
             ...j,
-            image_url: j.image ? `/images/${encodeURIComponent(j.image)}` : ""
+            image_url: j.image ? getStorageImageUrl(j.image) : ""
         }));
 
         const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
