@@ -715,7 +715,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
           <b>🎲 Nombre de jeux total :</b> ${nbJeux}
         </div>
 
-        <button onclick="window.location.href='/jeux/ajouter'">Ajouter un jeu</button><br>
+        <button onclick="window.location.href='/jeux/ajouter'">Ajouter un nouveau jeu</button><br>
         <button onclick="window.location.href='/jeux/gerer'">Modifier / Supprimer un jeu</button><br>
         <div class="result-box">
             <input id="rechercheJeu" placeholder="🔎 Rechercher un jeu..." style="max-width:300px;"><br>
@@ -1379,6 +1379,14 @@ app.get("/joueurs/ajouter", requireAuth, (req, res) => {
             Photo souvenir:<br>
             <input type="file" name="photo" accept="image/*"><br><br>
 
+            Rotation de l'image:<br>
+            <select name="rotation" style="max-width:120px;">
+                <option value="0">0°</option>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+            </select><br>
+
             <button>Ajouter</button>
         </form>
         </div>
@@ -1446,7 +1454,7 @@ app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
         const photoActuelle = joueur.photo ? getStorageImageUrl(joueur.photo) : "";
 
         const html = `
-            <h2>Modifier joueur</h2>
+            <h2>Modifier un joueur</h2>
             <div class="result-box">
             <form method="POST" action="/joueurs/modifier/${id}" enctype="multipart/form-data">
                 Nom:<br>
@@ -1462,6 +1470,14 @@ app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
                 ${joueur.photo ? `<div>Photo souvenir actuelle :<br><img src="${photoActuelle}" width="90"></div><br>` : ""}
                 Photo souvenir:<br>
                 <input type="file" name="photo" accept="image/*"><br><br>
+
+                Rotation de l'image:<br>
+                <select name="rotation" style="max-width:120px;">
+                    <option value="0">0°</option>
+                    <option value="90">90°</option>
+                    <option value="180">180°</option>
+                    <option value="270">270°</option>
+                </select><br>
 
                 <button>Modifier</button>
             </form>
@@ -1626,12 +1642,31 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
         const rotationAngle = Number(rotation || 0);
 
         if (req.file) {
-            updateData.image = await uploadImageToSupabase(
-                req.file,
-                "jeux",
-                nom || "image",
-                { width: 200, height: 200, quality: 82, rotation: rotationAngle }
-            );
+            const outputName = `jeu_${safeFileBaseName(nom || "image")}_${Date.now()}.jpg`;
+
+            const imagePipeline = req.file.buffer
+                ? sharp(req.file.buffer)
+                : sharp(req.file.path);
+
+            const buffer = await imagePipeline
+                .rotate(rotationAngle)
+                .resize({ width: 200, height: 200, fit: "inside", withoutEnlargement: true })
+                .jpeg({ quality: 82 })
+                .toBuffer();
+
+            const { error: uploadError } = await supabase.storage
+                .from("jeux-images")
+                .upload(outputName, buffer, {
+                    contentType: "image/jpeg",
+                    upsert: true
+                });
+
+            if (req.file.path) {
+                await fs.unlink(req.file.path).catch(() => {});
+            }
+
+            if (uploadError) throw uploadError;
+            updateData.image = outputName;
         }
 
         const { error } = await supabase
@@ -1717,7 +1752,7 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
 
         const joueurs = joueursTries.map(j => ({
             ...j,
-            image_url: j.image ? getStorageImageUrl(j.image) : ""
+            image_url: j.image ? getLocalImageUrl(j.image) : ""
         }));
 
         const joueursJson = JSON.stringify(joueurs).replace(/</g, "\\u003c");
@@ -2157,7 +2192,12 @@ app.get("/stats", requireAuth, async (req, res) => {
             .map(j => '<option value="' + j.id + '">' + escapeHtml(j.nom) + '</option>')
             .join("");
 
-        const joueursData = JSON.stringify(tousLesJoueurs).replace(/</g, "\\u003c");
+        const joueursData = JSON.stringify(
+            tousLesJoueurs.map(j => ({
+                ...j,
+                image_url: j.image ? getLocalImageUrl(j.image) : ""
+            }))
+        ).replace(/</g, "\\u003c");
 
         const html = `
         <h2>🥇 Top jeux 💀</h2>
@@ -2218,8 +2258,8 @@ app.get("/stats", requireAuth, async (req, res) => {
             "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px;'>" +
             joueursAAfficher.map(j =>
               "<div class='result-box' style='flex:1 1 180px; max-width:220px; min-width:150px; margin:0; text-align:center;'>" +
-                (j.image ? "<img src='/images/" + encodeURIComponent(j.image) + "' width='80'><br>" : "") +
-                "<strong>" + j.nom + "</strong>" +
+                (j.image_url ? "<img src='" + j.image_url + "' width='80'><br>" : "")
+              "<strong>" + j.nom + "</strong>" +
               "</div>"
             ).join("") +
             "</div>";
@@ -2236,9 +2276,9 @@ app.get("/stats", requireAuth, async (req, res) => {
           } else {
             items.forEach((j, idx) => {
               html += "<div style='display:flex; align-items:center; gap:12px; margin:10px 0;'>";
-              if (j.image) {
-                html += "<img src='/images/" + encodeURIComponent(j.image) + "' width='55'>";
-              }
+                if (j.image) {
+                html += "<img src='" + j.image + "' width='55'>";
+                }
               html += "<div>" +
                         "<span style='color:" + rankColor + "; font-weight:bold;'>#" + (idx + 1) + "</span> " +
                         "<b style='color:#000;'>" + j.jeu + "</b><br>" +
@@ -2685,8 +2725,8 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                         html += `
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid #ccc; padding:10px; margin:8px 0; border-radius:6px;">
                             <div style="display:flex; align-items:center; gap:12px;">
-                                ${p.joueurs?.image ? `<img src="/images/${encodeURIComponent(p.joueurs.image)}" width="55">` : ""}
-                                <div>
+                            ${p.joueurs?.image ? `<img src="${getLocalImageUrl(p.joueurs.image)}" width="55">` : ""}
+                            <div>
                                     <div><b>${escapeHtml(p.joueurs?.nom || "Joueur inconnu")}</b></div>
                                     <div>
                                         Gains : ${p.victoires} / ${c.victoires_pour_gagner}
@@ -3187,7 +3227,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                         <td>${(joueursParPartie[p.id] || []).join(", ") || "—"}</td>
                         <td>${new Date(p.date_creation).toLocaleDateString("fr-CA")}</td>
                         <td>${escapeHtml(p.prochain_joueur || "") || "—"}</td>
-                        <td>${p.photo ? `<img src="/images/${encodeURIComponent(p.photo)}" width="70">` : "—"}</td>
+                        <td>${p.photo ? `<img src="${getLocalImageUrl(p.photo)}" width="70">` : "—"}</td>
                         <td>${escapeHtml(p.notes || "")}</td>
                         <td>
                             <form method="POST" action="/jeux-en-cours/supprimer/${p.id}" onsubmit="return confirm('Supprimer cette partie en cours ?');">
@@ -3298,7 +3338,7 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
         if (!Array.isArray(joueur_ids)) joueur_ids = [joueur_ids];
         joueur_ids = joueur_ids.map(id => Number(id)).filter(id => !Number.isNaN(id));
 
-        const photo = req.file ? req.file.filename : null;
+        const photo = req.file ? `jeux/${req.file.filename}` : null;
 
         const { data: partie, error } = await supabase
             .from("jeux_en_cours")
