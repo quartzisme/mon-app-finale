@@ -1426,6 +1426,98 @@ app.post("/joueurs/ajouter", requireAuth, upload.fields([
     }
 });
 
+app.get("/joueurs/modifier/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data: joueur, error } = await supabase
+            .from("joueurs")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+        if (error) throw error;
+
+        if (!joueur) {
+            return res.send(renderPage("Erreur", "Joueur introuvable."));
+        }
+
+        const imageActuelle = joueur.image ? getStorageImageUrl(joueur.image) : "";
+        const photoActuelle = joueur.photo ? getStorageImageUrl(joueur.photo) : "";
+
+        const html = `
+            <h2>Modifier joueur</h2>
+            <div class="result-box">
+            <form method="POST" action="/joueurs/modifier/${id}" enctype="multipart/form-data">
+                Nom:<br>
+                <input name="nom" value="${escapeHtml(joueur.nom || "")}" required><br>
+
+                ⭐ Étoiles:<br>
+                <input type="number" name="etoiles" value="${joueur.etoiles ?? 0}"><br>
+
+                ${joueur.image ? `<div>Carte actuelle :<br><img src="${imageActuelle}" width="90"></div><br>` : ""}
+                Carte du joueur:<br>
+                <input type="file" name="image" accept="image/*"><br>
+
+                ${joueur.photo ? `<div>Photo souvenir actuelle :<br><img src="${photoActuelle}" width="90"></div><br>` : ""}
+                Photo souvenir:<br>
+                <input type="file" name="photo" accept="image/*"><br><br>
+
+                <button>Modifier</button>
+            </form>
+            </div>
+            <a href="/joueurs/liste">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Modifier joueur", html));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/joueurs/modifier/:id", requireAuth, upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "photo", maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const nom = req.body.nom;
+        const etoiles = req.body.etoiles ? parseInt(req.body.etoiles, 10) : null;
+
+        let updateData = {
+            nom,
+            etoiles
+        };
+
+        if (req.files?.image?.[0]) {
+            updateData.image = await uploadImageToSupabase(
+                req.files.image[0],
+                "joueurs",
+                `${nom}_carte`
+            );
+        }
+
+        if (req.files?.photo?.[0]) {
+            updateData.photo = await uploadImageToSupabase(
+                req.files.photo[0],
+                "photos",
+                `${nom}_souvenir`
+            );
+        }
+
+        const { error } = await supabase
+            .from("joueurs")
+            .update(updateData)
+            .eq("id", id);
+
+        if (error) throw error;
+
+        res.redirect("/joueurs/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
 app.get("/jeux/modifier", requireAuth, async (req, res) => {
     try {
         const id = req.query.id;
