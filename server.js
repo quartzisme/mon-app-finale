@@ -2215,38 +2215,38 @@ app.get("/stats", requireAuth, async (req, res) => {
         const joueursData = ${joueursData};
 
         function afficherCartesJoueurs(selection) {
-          const divCartes = document.getElementById("carte-joueur");
+        const divCartes = document.getElementById("carte-joueur");
 
-          if (!selection) {
+        if (!selection) {
             divCartes.innerHTML = "";
             return;
-          }
+        }
 
-          let joueursAAfficher = [];
+        let joueursAAfficher = [];
 
-          if (selection === "all") {
+        if (selection === "all") {
             joueursAAfficher = joueursData.filter(j => String(j.nom || "").trim().toUpperCase() !== "BGG");
-          } else if (selection === "all_with_bgg") {
+        } else if (selection === "all_with_bgg") {
             joueursAAfficher = joueursData;
-          } else if (selection === "bgg") {
+        } else if (selection === "bgg") {
             joueursAAfficher = joueursData.filter(j => String(j.nom || "").trim().toUpperCase() === "BGG");
-          } else {
+        } else {
             const joueur = joueursData.find(j => String(j.id) === String(selection));
             if (joueur) joueursAAfficher = [joueur];
-          }
+        }
 
-          if (!joueursAAfficher.length) {
+        if (!joueursAAfficher.length) {
             divCartes.innerHTML = "";
             return;
-          }
+        }
 
-          divCartes.innerHTML =
+        divCartes.innerHTML =
             "<div style='display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px;'>" +
             joueursAAfficher.map(j =>
-              "<div class='result-box' style='flex:1 1 180px; max-width:220px; min-width:150px; margin:0; text-align:center;'>" +
-                (j.image_url ? "<img src='" + j.image_url + "' width='80'><br>" : "") +
+            "<div class='result-box' style='flex:1 1 180px; max-width:220px; min-width:150px; margin:0; text-align:center;'>" +
+                (j.image ? "<img src='" + j.image + "' width='80'><br>" : "") +
                 "<strong>" + j.nom + "</strong>" +
-              "</div>"
+            "</div>"
             ).join("") +
             "</div>";
         }
