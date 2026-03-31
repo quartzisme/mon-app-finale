@@ -2179,10 +2179,10 @@ app.get("/stats", requireAuth, async (req, res) => {
         });
 
         const joueursData = JSON.stringify(
-            tousLesJoueurs.map(j => ({
-                ...j,
-                image_url: j.image ? getLocalImageUrl(j.image) : ""
-            }))
+        tousLesJoueurs.map(j => ({
+            ...j,
+            image: j.image ? getStorageImageUrl(j.image) : ""
+        }))
         ).replace(/</g, "\\u003c");
 
         const html = `
@@ -2711,7 +2711,7 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                         html += `
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid #ccc; padding:10px; margin:8px 0; border-radius:6px;">
                             <div style="display:flex; align-items:center; gap:12px;">
-                            ${p.joueurs?.image ? `<img src="${getLocalImageUrl(p.joueurs.image)}" width="55">` : ""}
+                                ${p.joueurs?.image ? `<img src="${getStorageImageUrl(p.joueurs.image)}" width="55">` : ""}
                             <div>
                                     <div><b>${escapeHtml(p.joueurs?.nom || "Joueur inconnu")}</b></div>
                                     <div>
@@ -3213,7 +3213,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                         <td>${(joueursParPartie[p.id] || []).join(", ") || "—"}</td>
                         <td>${new Date(p.date_creation).toLocaleDateString("fr-CA")}</td>
                         <td>${escapeHtml(p.prochain_joueur || "") || "—"}</td>
-                        <td>${p.photo ? `<img src="${getLocalImageUrl(p.photo)}" width="70">` : "—"}</td>
+                        <td>${p.photo ? `<img src="${getStorageImageUrl(p.photo)}" width="70">` : "—"}</td>
                         <td>${escapeHtml(p.notes || "")}</td>
                         <td>
                             <form method="POST" action="/jeux-en-cours/supprimer/${p.id}" onsubmit="return confirm('Supprimer cette partie en cours ?');">
@@ -3324,7 +3324,15 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
         if (!Array.isArray(joueur_ids)) joueur_ids = [joueur_ids];
         joueur_ids = joueur_ids.map(id => Number(id)).filter(id => !Number.isNaN(id));
 
-        const photo = req.file ? `jeux/${req.file.filename}` : null;
+        let photo = null;
+
+        if (req.file) {
+            photo = await uploadImageToSupabase(
+                req.file,
+                "jeux_en_cours",
+                `${nom_jeu || "jeu_en_cours"}_photo`
+            );
+        }
 
         const { data: partie, error } = await supabase
             .from("jeux_en_cours")
