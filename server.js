@@ -632,7 +632,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
-          <div style="color:#666; font-size: 10px;"> ver 20260325b</div>
+          <div style="color:#666; font-size: 10px;"> ver 20260401</div>
         </div>
       </form>
     </div>
@@ -2551,9 +2551,9 @@ app.get("/filtrages", requireAuth, async (req, res) => {
                   "<tr>" +
                     "<th>⚔️ Jeux</th>" +
                     "<th>👥 Joueurs</th>" +
-                    "<th>⌛ Temps</th>" +
+                    "<th>⌛ Temps (min)</th>" +
                     "<th>⭐ Local</th>" +
-                     "<th>ℹ️ Status</th>" +
+                    "<th>ℹ️ Status</th>" +
                     "<th>🔗 Extension</th>" +
                     "<th><span style='color:#1e88e5; font-size:1.25em;'>⬢</span> BGG</th>" +
                     "<th>⭐ Scores</th>" +
@@ -2561,8 +2561,8 @@ app.get("/filtrages", requireAuth, async (req, res) => {
                   data.map(j =>
                     "<tr>" +
                       "<td><b>" + txt(j.nom) + "</b></td>" +
-                      "<td>" + txt(j.min_joueurs) + "-" + txt(j.max_joueurs) + "</td>" +
-                      "<td>" + txt(j.temps_max) + " min</td>" +
+                      "<td class="col-center">" + txt(j.min_joueurs) + "-" + txt(j.max_joueurs) + "</td>" +
+                      "<td>" + txt(j.temps_max) + "</td>" +
                       "<td>" + txt(j.moyenne) + "</td>" +
                       "<td>" + txt(j.bgg_average_rating) + "</td>" +
                       "<td>" + ((j.statut && j.statut.trim() !== "") ? j.statut : "—") + "</td>" +
@@ -3209,17 +3209,26 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                 ${(parties || []).map((p, index) => `
                     <tr>
                         <td>${index + 1}</td>
+                        <td>${new Date(p.date_creation).toLocaleDateString("fr-CA")}</td>
                         <td>${escapeHtml(p.nom_jeu)}</td>
                         <td>${(joueursParPartie[p.id] || []).join(", ") || "—"}</td>
-                        <td>${new Date(p.date_creation).toLocaleDateString("fr-CA")}</td>
                         <td>${escapeHtml(p.prochain_joueur || "") || "—"}</td>
                         <td>${p.photo ? `<img src="${getStorageImageUrl(p.photo)}" width="70">` : "—"}</td>
                         <td>${escapeHtml(p.notes || "")}</td>
                         <td>
-                            <form method="POST" action="/jeux-en-cours/supprimer/${p.id}" onsubmit="return confirm('Supprimer cette partie en cours ?');">
+                            <button
+                                type="button"
+                                onclick="window.location.href='/jeux-en-cours/modifier/${p.id}'"
+                                style="width:auto;"
+                            >
+                                ✏ Modifier
+                            </button>
+
+                            <form method="POST" action="/jeux-en-cours/supprimer/${p.id}" onsubmit="return confirm('Supprimer cette partie en cours ?');" style="display:inline;">
                                 <button type="submit" style="width:auto;">🗑 Supprimer</button>
                             </form>
                         </td>
+
                     </tr>
                 `).join("")}
             </table>
@@ -3353,6 +3362,207 @@ app.post("/jeux-en-cours/ajouter", requireAuth, upload.single("photo"), async (r
                 .insert(inserts);
 
             if (liensError) throw liensError;
+        }
+
+        res.redirect("/jeux-en-cours");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.get("/jeux-en-cours/modifier/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data: partie, error: partieError } = await supabase
+            .from("jeux_en_cours")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+        if (partieError) throw partieError;
+        if (!partie) {
+            return res.send(renderPage("Erreur", "Partie introuvable."));
+        }
+
+        const { data: jeux, error: jeuxError } = await supabase
+            .from("jeux")
+            .select("id, nom")
+            .order("nom");
+
+        if (jeuxError) throw jeuxError;
+
+        const { data: joueursBrut, error: joueursError } = await supabase
+            .from("joueurs")
+            .select("id, nom")
+            .order("nom");
+
+        if (joueursError) throw joueursError;
+
+        const joueurs = (joueursBrut || []).filter(
+            j => String(j.nom || "").trim().toUpperCase() !== "BGG"
+        );
+
+        const { data: liens, error: liensError } = await supabase
+            .from("jeux_en_cours_joueurs")
+            .select("joueur_id")
+            .eq("jeu_en_cours_id", id);
+
+        if (liensError) throw liensError;
+
+        const joueurIdsSelectionnes = new Set((liens || []).map(l => Number(l.joueur_id)));
+
+        const html = `
+        <h2>✏ Modifier un jeu en cours</h2>
+
+        <div class="result-box">
+            <form method="POST" action="/jeux-en-cours/modifier/${partie.id}" enctype="multipart/form-data">
+                Jeu:<br>
+                <select name="nom_jeu" required>
+                    <option value="">-- Choisir un jeu --</option>
+                    ${(jeux || []).map(j => `
+                        <option value="${escapeHtml(j.nom)}" ${j.nom === partie.nom_jeu ? "selected" : ""}>
+                            ${escapeHtml(j.nom)}
+                        </option>
+                    `).join("")}
+                </select><br>
+
+                Joueurs impliqués:<br>
+                <select name="joueur_ids[]" id="joueurs_en_cours" multiple size="6" style="max-width:400px;" required>
+                    ${(joueurs || []).map(j => `
+                        <option value="${j.id}" data-nom="${escapeHtml(j.nom)}" ${joueurIdsSelectionnes.has(Number(j.id)) ? "selected" : ""}>
+                            ${escapeHtml(j.nom)}
+                        </option>
+                    `).join("")}
+                </select><br>
+
+                Tour à quel joueur de jouer:<br>
+                <select name="prochain_joueur" id="prochain_joueur" style="max-width:220px;">
+                    <option value="">-- Choisir --</option>
+                </select><br>
+
+                ${partie.photo ? `<div>Photo actuelle :<br><img src="${getStorageImageUrl(partie.photo)}" width="100"></div><br>` : ""}
+
+                Nouvelle photo:<br>
+                <input type="file" name="photo" accept="image/*"><br>
+
+                Notes:<br>
+                <textarea name="notes" rows="4">${escapeHtml(partie.notes || "")}</textarea><br><br>
+
+                <button>Enregistrer</button>
+            </form>
+        </div>
+
+        <a href="/jeux-en-cours">⬅ Retour</a>
+        `;
+
+        const pageAvecScript = html + `
+        <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const selectJoueurs = document.getElementById("joueurs_en_cours");
+            const selectTour = document.getElementById("prochain_joueur");
+            const valeurActuelle = ${JSON.stringify(partie.prochain_joueur || "")};
+
+            if (!selectJoueurs || !selectTour) return;
+
+            function escapeHtmlJs(str) {
+                return String(str)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#39;");
+            }
+
+            function majProchainJoueur() {
+                const selectionnes = Array.from(selectJoueurs.selectedOptions).map(function (opt) {
+                    return {
+                        nom: opt.getAttribute("data-nom") || opt.textContent || ""
+                    };
+                });
+
+                let options = "<option value=''>-- Choisir --</option>";
+                selectionnes.forEach(function (j) {
+                    const nomSafe = escapeHtmlJs(j.nom);
+                    const selected = j.nom === valeurActuelle ? " selected" : "";
+                    options += "<option value='" + nomSafe + "'" + selected + ">" + nomSafe + "</option>";
+                });
+
+                selectTour.innerHTML = options;
+            }
+
+            selectJoueurs.addEventListener("change", majProchainJoueur);
+            majProchainJoueur();
+        });
+        </script>
+        `;
+
+        res.send(renderPage("Modifier un jeu en cours", pageAvecScript));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/jeux-en-cours/modifier/:id", requireAuth, upload.single("photo"), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const nom_jeu = (req.body.nom_jeu || "").trim();
+        const notes = (req.body.notes || "").trim() || null;
+        const prochain_joueur = (req.body.prochain_joueur || "").trim() || null;
+
+        let joueur_ids = req.body["joueur_ids[]"] || req.body.joueur_ids || [];
+        if (!Array.isArray(joueur_ids)) joueur_ids = [joueur_ids];
+        joueur_ids = joueur_ids.map(v => Number(v)).filter(v => !Number.isNaN(v));
+
+        const { data: partieActuelle, error: partieError } = await supabase
+            .from("jeux_en_cours")
+            .select("photo")
+            .eq("id", id)
+            .single();
+
+        if (partieError) throw partieError;
+
+        let photo = partieActuelle?.photo || null;
+
+        if (req.file) {
+            photo = await uploadImageToSupabase(
+                req.file,
+                "jeux_en_cours",
+                `${nom_jeu || "jeu_en_cours"}_photo`
+            );
+        }
+
+        const { error: updateError } = await supabase
+            .from("jeux_en_cours")
+            .update({
+                nom_jeu,
+                photo,
+                notes,
+                prochain_joueur
+            })
+            .eq("id", id);
+
+        if (updateError) throw updateError;
+
+        const { error: deleteLiensError } = await supabase
+            .from("jeux_en_cours_joueurs")
+            .delete()
+            .eq("jeu_en_cours_id", id);
+
+        if (deleteLiensError) throw deleteLiensError;
+
+        if (joueur_ids.length > 0) {
+            const inserts = joueur_ids.map(joueur_id => ({
+                jeu_en_cours_id: Number(id),
+                joueur_id
+            }));
+
+            const { error: insertLiensError } = await supabase
+                .from("jeux_en_cours_joueurs")
+                .insert(inserts);
+
+            if (insertLiensError) throw insertLiensError;
         }
 
         res.redirect("/jeux-en-cours");
