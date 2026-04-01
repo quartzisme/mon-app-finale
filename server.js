@@ -700,7 +700,10 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                 temps_max,
                 statut,
                 bgg_average_rating,
-                scores(score)
+                scores(
+                    score,
+                    joueurs(nom)
+                )
             `)
             .order("nom");
 
@@ -734,19 +737,23 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
               <th>⌛ Temps (min)</th>
               <th>ℹ️ Statut</th>
               <th><span style="color:#1e88e5; font-size:1.15em;">⬢</span><br>BGG</th>
-              <th>⭐ Moyenne</th>
+              <th>⭐ Moyenne joueurs</th>
             </tr>
         `;
 
         (jeux || []).forEach((j, index) => {
             let moyenne = "—";
 
-            if (j.scores && j.scores.length > 0) {
+            const scoresJoueurs = (j.scores || []).filter(s =>
+                String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
+            );
+
+            if (scoresJoueurs.length > 0) {
                 const avg =
-                    j.scores.reduce((a, b) => a + Number(b.score), 0) /
-                    j.scores.length;
+                    scoresJoueurs.reduce((a, b) => a + Number(b.score), 0) /
+                    scoresJoueurs.length;
                 moyenne = avg.toFixed(2);
-            }
+            }            
 
             const imageSrc = j.image ? getStorageImageUrl(j.image) : "";
 
@@ -1245,7 +1252,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                         <form class="inline-form" onsubmit="return false;">
                             <button
                                 type="button"
-                                style="width:auto;"
+                                style="width:auto; background:#2b7cff;"
                                 onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${nomSafe}')"
                             >
                                 📷 Souvenir
@@ -3219,16 +3226,21 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                             <button
                                 type="button"
                                 onclick="window.location.href='/jeux-en-cours/modifier/${p.id}'"
-                                style="width:auto;"
+                                style="width:auto; background:#2b7cff; color:white; border:none; border-radius:6px; padding:8px 12px; margin-right:6px;"
                             >
                                 ✏ Modifier
                             </button>
 
                             <form method="POST" action="/jeux-en-cours/supprimer/${p.id}" onsubmit="return confirm('Supprimer cette partie en cours ?');" style="display:inline;">
-                                <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                                <button
+                                    type="submit"
+                                    style="width:auto; background:#2b7cff; color:white; border:none; border-radius:6px; padding:8px 12px;"
+                                >
+                                    🗑 Supprimer
+                                </button>
                             </form>
                         </td>
-
+                        
                     </tr>
                 `).join("")}
             </table>
