@@ -1176,6 +1176,25 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
         if (error) throw error;
 
+        const { data: invitesBrut, error: invitesError } = await supabase
+            .from("joueurs_invites")
+            .select("id, nom")
+            .order("nom");
+
+        if (invitesError) throw invitesError;
+
+        const { data: invitesJeux, error: invitesJeuxError } = await supabase
+            .from("joueurs_invites_jeux")
+            .select(`
+                id,
+                joueur_invite_id,
+                appreciation,
+                jeux ( nom )
+            `)
+            .order("id", { ascending: true });
+
+        if (invitesJeuxError) throw invitesJeuxError;
+
         const ordrePrincipal = ["VINCENT", "MARC", "JULIE"];
 
         const joueurs = [...(joueursBrut || [])].sort((a, b) => {
@@ -1250,7 +1269,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                     souvenirButton = `
                         <form class="inline-form" onsubmit="return false;">
                             <button
-                                type="submit"
+                                type="button"
                                 style="width:auto;"
                                 onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${nomSafe}')"
                             >
@@ -1301,12 +1320,67 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
             })
         );
 
+        const jeuxParInvite = {};
+        (invitesJeux || []).forEach(l => {
+            if (!jeuxParInvite[l.joueur_invite_id]) jeuxParInvite[l.joueur_invite_id] = [];
+            jeuxParInvite[l.joueur_invite_id].push({
+                appreciation: l.appreciation || "—",
+                jeuNom: l.jeux?.nom || "Jeu"
+            });
+        });
+
+        const invitesRows = (invitesBrut || []).map(invite => {
+            const jeuxJoues = jeuxParInvite[invite.id] || [];
+
+            const appreciationTexte = (valeur) => {
+                const v = String(valeur || "").trim().toLowerCase();
+                if (v === "oui") return "Oui";
+                if (v === "moyen") return "Moyen";
+                if (v === "non") return "Non";
+                return valeur || "—";
+            };
+
+            return `
+            <div class="result-box" style="margin-bottom:15px;">
+              <b>🧍 ${escapeHtml(invite.nom || "")}</b><br><br>
+
+              <b>🎲 Jeux joués :</b><br>
+              ${
+                  jeuxJoues.length > 0
+                      ? jeuxJoues.map(j =>
+                          `• ${escapeHtml(j.jeuNom)} — Appréciation : <b>${escapeHtml(appreciationTexte(j.appreciation))}</b>`
+                        ).join("<br>")
+                      : "—"
+              }
+              <br><br>
+
+              <form method="GET" action="/joueurs-invites/modifier/${invite.id}" class="inline-form">
+                <button type="submit" style="width:auto;">✏ Modifier</button>
+              </form>
+              &nbsp;
+
+              <form method="POST" action="/joueurs-invites/supprimer/${invite.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur invité ?');">
+                <button type="submit" style="width:auto;">🗑 Supprimer</button>
+              </form>
+            </div>
+            `;
+        });
+
         const html = `
         <h2>👥 Gestion des joueurs</h2>
-        <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button><br>
+        <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button>
+        <button onclick="window.location.href='/joueurs-invites/ajouter'">Ajouter un joueur invité</button><br>
         <br>
 
+        <h3>Joueurs réguliers</h3>
         ${rows.join("")}
+
+        <h3>Joueurs invités</h3>
+        ${
+            invitesRows.length > 0
+                ? invitesRows.join("")
+                : `<div class="result-box">Aucun joueur invité pour le moment.</div>`
+        }
 
         <div id="zoomOverlay" class="zoom-overlay" onclick="fermerZoomJoueur()">
           <div class="zoom-box" id="zoomBox" onclick="event.stopPropagation()"></div>
@@ -1537,6 +1611,91 @@ app.post("/joueurs/modifier/:id", requireAuth, upload.fields([
     }
 });
 
+// ===================== Joueurs invités =====================
+app.get("/joueurs-invites/ajouter", requireAuth, async (req, res) => {
+    try {
+        const { data: jeux, error } = await supabase
+            .from("jeux")
+            .select("id, nom")
+            .order("nom");
+
+        if (error) throw error;
+
+        const html = `
+        <h2>Ajouter un joueur invité</h2>
+
+        <div class="result-box">
+            <form method="POST" action="/joueurs-invites/ajouter">
+                Nom du joueur invité:<br>
+                <input name="nom" required><br>
+
+                Jeu joué:<br>
+                <select name="jeu_id" required>
+                    <option value="">-- Choisir un jeu --</option>
+                    ${(jeux || []).map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
+                </select><br>
+
+                A-t-il aimé le jeu?<br>
+                <select name="appreciation" required style="max-width:220px;">
+                    <option value="">-- Choisir --</option>
+                    <option value="oui">Oui</option>
+                    <option value="moyen">Moyen</option>
+                    <option value="non">Non</option>
+                </select><br><br>
+
+                <button>Ajouter</button>
+            </form>
+        </div>
+
+        <a href="/joueurs/liste">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Ajouter joueur invité", html));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/joueurs-invites/ajouter", requireAuth, async (req, res) => {
+    try {
+        const nom = (req.body.nom || "").trim();
+        const jeu_id = Number(req.body.jeu_id);
+        const appreciation = (req.body.appreciation || "").trim().toLowerCase();
+
+        if (!nom) {
+            return res.send(renderPage("Erreur", "Le nom du joueur invité est requis."));
+        }
+
+        if (!jeu_id || !["oui", "moyen", "non"].includes(appreciation)) {
+            return res.send(renderPage("Erreur", "Les informations sont invalides."));
+        }
+
+        const { data: invite, error: inviteError } = await supabase
+            .from("joueurs_invites")
+            .insert([{ nom }])
+            .select()
+            .single();
+
+        if (inviteError) throw inviteError;
+
+        const { error: lienError } = await supabase
+            .from("joueurs_invites_jeux")
+            .insert([{
+                joueur_invite_id: invite.id,
+                jeu_id,
+                appreciation
+            }]);
+
+        if (lienError) throw lienError;
+
+        res.redirect("/joueurs/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+
+// ===================== Jeux =====================
 app.get("/jeux/modifier", requireAuth, async (req, res) => {
     try {
         const id = req.query.id;
@@ -1611,6 +1770,9 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
         res.send(renderPage("Erreur", err.message));
     }
 });
+
+
+
 
 app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res) => {
     try {
@@ -3301,7 +3463,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                 Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
 
-                <button> type="button"; Ajouter</button>
+                <button>Ajouter</button>
             </form>
         </div>
      
@@ -3694,7 +3856,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
 
-                <button>type="button";Ajouter</button>
+                <button>Ajouter</button>
             </form>
         </div>
 
