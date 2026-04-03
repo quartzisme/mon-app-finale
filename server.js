@@ -632,7 +632,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
-          <div style="color:#666; font-size: 10px;"> ver 20260401</div>
+          <div style="color:#666; font-size: 10px;"> ver 2026.04.03a</div>
         </div>
       </form>
     </div>
@@ -664,11 +664,11 @@ app.get("/menu", requireAuth, (req, res) => {
           <div style="display:flex; flex-direction:column; gap:12px; max-width:320px;">
             <li class="menu-item"><a href="/jeux/liste">⚔️ Jeux</a></li>
             <li class="menu-item"><a href="/joueurs/liste">👥 Joueurs</a></li>
-            <li class="menu-item"><a href="/scores/ajouter">📊 Inscription des Scores</a></li>
+            <li class="menu-item"><a href="/scores/ajouter">📊 Scores</a></li>
             <li class="menu-item"><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
             <li class="menu-item"><a href="/filtrages">🔍 Filtrages</a></li>
             <li class="menu-item"><a href="/competitions/liste">🏆 Compétitions</a></li>
-            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours</a></li>
+            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours / en ligne</a></li>
             <li class="menu-item"><a href="/jeux-desires">🛒 Jeux désirés</a></li>
             <li class="menu-item"><a href="/logout">⏻ Déconnexion</a></li>
           </div>
@@ -1251,8 +1251,8 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                     souvenirButton = `
                         <form class="inline-form" onsubmit="return false;">
                             <button
-                                type="button"
-                                style="width:auto; background:#2b7cff;"
+                                type="submit"
+                                style="width:auto;"
                                 onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${nomSafe}')"
                             >
                                 📷 Souvenir
