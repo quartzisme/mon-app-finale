@@ -743,6 +743,15 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
 
         (jeux || []).forEach((j, index) => {
             let moyenne = "—";
+            let bggScore = "—";
+
+            const scoreBGG = (j.scores || []).find(s =>
+                String(s.joueurs?.nom || "").trim().toUpperCase() === "BGG"
+            );
+
+            if (scoreBGG && scoreBGG.score !== null && scoreBGG.score !== undefined) {
+                bggScore = Number(scoreBGG.score).toFixed(2);
+            }
 
             const scoresJoueurs = (j.scores || []).filter(s =>
                 String(s.joueurs?.nom || "").trim().toUpperCase() !== "BGG"
@@ -753,7 +762,7 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
                     scoresJoueurs.reduce((a, b) => a + Number(b.score), 0) /
                     scoresJoueurs.length;
                 moyenne = avg.toFixed(2);
-            }            
+            }
 
             const imageSrc = j.image ? getStorageImageUrl(j.image) : "";
 
@@ -777,16 +786,11 @@ app.get("/jeux/liste", requireAuth, async (req, res) => {
             <td class="col-center">${j.min_joueurs ?? "—"}-${j.max_joueurs ?? "—"}</td>
             <td>${j.temps_min ?? "—"}-${j.temps_max ?? "—"}</td>
             <td>${escapeHtml(j.statut || "") || "—"}</td>
-            <td class="col-right">${
-                j.bgg_average_rating !== null && j.bgg_average_rating !== undefined
-                    ? `${j.bgg_average_rating}`
-                    : "—"
-            }</td>
+            <td class="col-right">${bggScore}</td>
             <td class="col-right"><strong>${moyenne}</strong></td>
             </tr>
             `;
-
-        });        
+        });   
 
         html += `
           </table>
@@ -1043,9 +1047,6 @@ app.get("/jeux/modifier", requireAuth, async (req, res) => {
           Statut<br>
           <input name="statut" value="${escapeHtml(jeu.statut || "")}"><br>
 
-          BGG average rating<br>
-          <input type="number" step="0.01" min="0" max="10" name="bgg_average_rating" value="${jeu.bgg_average_rating ?? ""}"><br>
-
           ${jeu.image ? `<div>Image actuelle :<br><img src="${getGameImageUrl(jeu.image)}" width="90"></div><br>` : ""}
 
           Rotation de l'image:<br>
@@ -1081,7 +1082,6 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
             temps_min,
             temps_max,
             statut,
-            bgg_average_rating,
             rotation
         } = req.body;
 
@@ -1097,7 +1097,6 @@ app.post("/jeux/modifier", requireAuth, upload.single("image"), async (req, res)
             temps_min: toIntOrNull(temps_min),
             temps_max: toIntOrNull(temps_max),
             statut: statut?.trim() || null,
-            bgg_average_rating: bgg_average_rating ? Number(bgg_average_rating) : null
         };
 
         const rotationAngle = Number(rotation || 0);
@@ -2344,10 +2343,40 @@ app.get("/api/stats", requireAuth, async (req, res) => {
 
         if (joueur === "bgg") {
             const { data: jeux, error } = await supabase
-                .from("jeux")
-                .select("id, nom, image, bgg_average_rating")
-                .not("bgg_average_rating", "is", null);
+            if (joueur === "bgg") {
+                const { data: scoresBGG, error } = await supabase
+                    .from("scores")
+                    .select(`
+                        score,
+                        jeux (
+                            id,
+                            nom,
+                            image
+                        ),
+                        joueurs (
+                            nom
+                        )
+                    `);
 
+                if (error) throw error;
+
+                const resultats = (scoresBGG || [])
+                    .filter(s => String(s.joueurs?.nom || "").trim().toUpperCase() === "BGG")
+                    .filter(s => s.jeux?.nom)
+                    .map(s => ({
+                        jeu: s.jeux.nom,
+                        image: s.jeux.image ? getGameImageUrl(s.jeux.image) : null,
+                        moyenne: Number(s.score)
+                    }));
+
+                resultats.sort((a, b) => b.moyenne - a.moyenne);
+
+                return res.json({
+                    meilleurs: resultats.slice(0, nb),
+                    pires: resultats.slice(-nb).reverse()
+                });
+            }
+            
             if (error) throw error;
 
             const resultats = (jeux || []).map(j => ({
@@ -2695,7 +2724,7 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
                         <h3 style="margin:0;">${escapeHtml(c.nom || "Compétition")}</h3>
                         <div>
-                            <button type="button" onclick="window.location.href='/competitions/modifier/${c.id}'" style="width:auto;">✏ Modifier</button>
+                            <button type="submit" onclick="window.location.href='/competitions/modifier/${c.id}'" style="width:auto;">✏ Modifier</button>
 
                             <form method="POST" action="/competitions/supprimer/${c.id}" style="display:inline;" onsubmit="return confirm('Supprimer cette compétition ?');">
                                 <button type="submit" style="width:auto;">🗑 Supprimer</button>
@@ -2755,6 +2784,7 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                 if (c.terminee) {
                     html += `
                     <div style="margin-top:10px;">
+                        <br>
                         <b>🏆 Gagnant :</b> ${escapeHtml(gagnant?.joueurs?.nom || "Inconnu")}
                         ${c.jeux?.nom ? ` — <b>Jeu :</b> ${escapeHtml(c.jeux.nom)}` : ""}
                     </div>
@@ -3199,7 +3229,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
         });
 
         let html = `
-        <h2>⏸️ Jeux en cours</h2>
+        <h2>⏸️ Jeux en cours & en ligne</h2>
 
         <div class="table-wrap">
             <table class="jeux-table">
@@ -3271,7 +3301,7 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
                 Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
 
-                <button>Ajouter</button>
+                <button> type="button"; Ajouter</button>
             </form>
         </div>
      
@@ -3664,7 +3694,7 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
                 Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
 
-                <button>Ajouter</button>
+                <button>type="button";Ajouter</button>
             </form>
         </div>
 
