@@ -1186,10 +1186,10 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         const { data: invitesJeux, error: invitesJeuxError } = await supabase
             .from("joueurs_invites_jeux")
             .select(`
-                id,
-                joueur_invite_id,
-                appreciation,
-                jeux ( nom )
+                id, 
+                joueur_invite_id, 
+                appreciation, 
+                jeux ( nom, image )
             `)
             .order("id", { ascending: true });
 
@@ -1200,14 +1200,13 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
         const joueurs = [...(joueursBrut || [])].sort((a, b) => {
             const na = String(a.nom || "").trim().toUpperCase();
             const nb = String(b.nom || "").trim().toUpperCase();
-
             const aBGG = na === "BGG";
             const bBGG = nb === "BGG";
+
             if (aBGG !== bBGG) return aBGG ? 1 : -1;
 
             const ia = ordrePrincipal.indexOf(na);
             const ib = ordrePrincipal.indexOf(nb);
-
             const aPrincipal = ia !== -1;
             const bPrincipal = ib !== -1;
 
@@ -1227,14 +1226,11 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
             joueurs.map(async (j) => {
                 const isBGG = String(j.nom || "").trim().toUpperCase() === "BGG";
                 const nbScores = j.scores ? j.scores.length : 0;
-
-                const moyenneGlobale = nbScores
-                    ? (j.scores.reduce((a, b) => a + Number(b.score), 0) / nbScores).toFixed(2)
+                const moyenneGlobale = nbScores 
+                    ? (j.scores.reduce((a, b) => a + Number(b.score), 0) / nbScores).toFixed(2) 
                     : "—";
 
-                const pourcentage = totalJeux
-                    ? Math.round((nbScores / totalJeux) * 100)
-                    : 0;
+                const pourcentage = totalJeux ? Math.round((nbScores / totalJeux) * 100) : 0;
 
                 const { data: bestScores, error: bestScoresError } = await supabase
                     .from("scores")
@@ -1248,15 +1244,12 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 if (bestScoresError) throw bestScoresError;
 
                 let bestJeuHTML = "Aucun score";
-
                 if (bestScores && bestScores.length > 0) {
                     const maxScore = Number(bestScores[0].score);
-
                     const meilleurs = bestScores
                         .filter((s) => Number(s.score) === maxScore)
                         .map((s) => s.jeux?.nom || "Jeu inconnu");
-
-                    bestJeuHTML = meilleurs.join(", ");
+                    bestJeuHTML = `${meilleurs.join(", ")} (${maxScore})`;
                 }
 
                 const imageSrc = j.image ? getStorageImageUrl(j.image) : "";
@@ -1268,11 +1261,7 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 if (j.photo) {
                     souvenirButton = `
                         <form class="inline-form" onsubmit="return false;">
-                            <button
-                                type="button"
-                                style="width:auto;"
-                                onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${nomSafe}')"
-                            >
+                            <button type="button" style="width:auto;" onclick="event.stopPropagation(); ouvrirZoomSouvenir('${photoSrc}', '${nomSafe}')">
                                 📷 Souvenir
                             </button>
                         </form>
@@ -1281,57 +1270,58 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 }
 
                 return `
-                <div class="result-box" style="margin-bottom:15px;">
-                  <table style="width:100%;">
-                    <tr>
-                      <td style="width:150px; text-align:center; vertical-align:top;">
-                        <div class="joueur-mini-carte"
-                             onclick="ouvrirZoomCarteJoueur(this)"
-                             data-image="${imageSrc}"
-                             data-nom="${nomSafe}"
-                             data-etoiles="${escapeHtml(etoilesTexte)}">
-                          ${j.image ? `<img src="${imageSrc}" width="80"><br>` : ""}
-                          <strong>${nomSafe}</strong><br>
-                          ${isBGG ? "" : `⭐ ${j.etoiles || 0}`}
-                        </div>
-                      </td>
-
-                      <td style="vertical-align:top;">
-                        <b>🧩 Jeux évalués :</b> ${nbScores} (${pourcentage}%)
-                        <div><b><span style="color:#FFD700; font-size:1.2em;">x̄</span> Moyenne des scores donnés :</b> ${moyenneGlobale}</div>
-                        <div><b>🔝 Meilleur(s) jeu-score :</b> ${escapeHtml(bestJeuHTML)}</div>
-                        <br>
-
-                        ${souvenirButton}
-
-                        <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form">
-                          <button type="submit" style="width:auto;">✏ Modifier</button>
-                        </form>
-                        &nbsp;
-
-                        <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur ?');">
-                          <button type="submit" style="width:auto;">🗑 Supprimer</button>
-                        </form>
-                      </td>
-                    </tr>
-                  </table>
-                </div>
+                    <div class="result-box" style="margin-bottom:15px;">
+                        <table style="width:100%;">
+                            <tr>
+                                <td style="width:150px; text-align:center; vertical-align:top;">
+                                    <div class="joueur-mini-carte" onclick="ouvrirZoomCarteJoueur(this)" 
+                                         data-image="${imageSrc}" 
+                                         data-nom="${nomSafe}" 
+                                         data-etoiles="${escapeHtml(etoilesTexte)}">
+                                        ${j.image ? `<img src="${imageSrc}" width="80"><br>` : ""}
+                                        <strong>${nomSafe}</strong><br>
+                                        ${isBGG ? "" : `⭐ ${j.etoiles || 0}`}
+                                    </div>
+                                </td>
+                                <td style="vertical-align:top;">
+                                    <b>🧩 Jeux évalués :</b> ${nbScores} (${pourcentage}%)
+                                    <div>
+                                        <b><span style="color:#FFD700; font-size:1.2em;">x̄</span> Moyenne des scores :</b> ${moyenneGlobale}
+                                    </div>
+                                    <div>
+                                        <b>🔝 Meilleur(s) jeu(x) :</b> ${escapeHtml(bestJeuHTML)}
+                                    </div>
+                                    <br>
+                                    ${souvenirButton}
+                                    <form method="GET" action="/joueurs/modifier/${j.id}" class="inline-form">
+                                        <button type="submit" style="width:auto;">✏ Modifier</button>
+                                    </form>
+                                    &nbsp;
+                                    <form method="POST" action="/joueurs/supprimer/${j.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur ?');">
+                                        <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
                 `;
             })
         );
 
         const jeuxParInvite = {};
-        (invitesJeux || []).forEach(l => {
-            if (!jeuxParInvite[l.joueur_invite_id]) jeuxParInvite[l.joueur_invite_id] = [];
+        (invitesJeux || []).forEach((l) => {
+            if (!jeuxParInvite[l.joueur_invite_id]) {
+                jeuxParInvite[l.joueur_invite_id] = [];
+            }
             jeuxParInvite[l.joueur_invite_id].push({
                 appreciation: l.appreciation || "—",
-                jeuNom: l.jeux?.nom || "Jeu"
+                jeuNom: l.jeux?.nom || "Jeu",
+                jeuImage: l.jeux?.image ? getStorageImageUrl(l.jeux.image) : ""
             });
         });
 
-        const invitesRows = (invitesBrut || []).map(invite => {
+        const invitesRows = (invitesBrut || []).map((invite) => {
             const jeuxJoues = jeuxParInvite[invite.id] || [];
-
             const appreciationTexte = (valeur) => {
                 const v = String(valeur || "").trim().toLowerCase();
                 if (v === "oui") return "Oui";
@@ -1339,105 +1329,101 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
                 if (v === "non") return "Non";
                 return valeur || "—";
             };
+            const appreciationColor = (valeur) => {
+                const v = String(valeur || "").trim().toLowerCase();
+                if (v === "oui") return "#1b8f3a";
+                if (v === "non") return "#c62828";
+                return "#000";
+            };
 
             return `
-            <div class="result-box" style="margin-bottom:15px;">
-              <b>🧍 ${escapeHtml(invite.nom || "")}</b><br><br>
-
-              <b>🎲 Jeux joués :</b><br>
-              ${
-                  jeuxJoues.length > 0
-                      ? jeuxJoues.map(j =>
-                          `• ${escapeHtml(j.jeuNom)} — Appréciation : <b>${escapeHtml(appreciationTexte(j.appreciation))}</b>`
-                        ).join("<br>")
-                      : "—"
-              }
-              <br><br>
-
-              <form method="GET" action="/joueurs-invites/modifier/${invite.id}" class="inline-form">
-                <button type="submit" style="width:auto;">✏ Modifier</button>
-              </form>
-              &nbsp;
-
-              <form method="POST" action="/joueurs-invites/supprimer/${invite.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur invité ?');">
-                <button type="submit" style="width:auto;">🗑 Supprimer</button>
-              </form>
-            </div>
+                <div class="result-box" style="margin-bottom:15px;">
+                    <b>👤 ${escapeHtml(invite.nom || "")}</b><br><br>
+                    <b>🎲 Jeux joués :</b><br><br>
+                    ${jeuxJoues.length > 0 ? jeuxJoues.map((j) => `
+                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                            ${j.jeuImage ? `<img src="${j.jeuImage}" width="55" style="border-radius:8px;">` : ""}
+                            <div>
+                                <div><b>${escapeHtml(j.jeuNom)}</b></div>
+                                <div>
+                                    Appréciation : 
+                                    <b style="color:${appreciationColor(j.appreciation)};">
+                                        ${escapeHtml(appreciationTexte(j.appreciation))}
+                                    </b>
+                                </div>
+                            </div>
+                        </div>
+                    `).join("") : "—"}
+                    <br>
+                    <form method="GET" action="/joueurs-invites/modifier/${invite.id}" class="inline-form">
+                        <button type="submit" style="width:auto;">✏ Modifier</button>
+                    </form>
+                    &nbsp;
+                    <form method="POST" action="/joueurs-invites/supprimer/${invite.id}" class="inline-form" onsubmit="return confirm('Supprimer ce joueur invité ?');">
+                        <button type="submit" style="width:auto;">🗑 Supprimer</button>
+                    </form>
+                </div>
             `;
         });
 
         const html = `
-        <h2>👥 Gestion des joueurs</h2>
-        <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button>
-        <button onclick="window.location.href='/joueurs-invites/ajouter'">Ajouter un joueur invité</button><br>
-        <br>
+            <h2>👥 Gestion des joueurs</h2>
+            <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button>
+            <button onclick="window.location.href='/joueurs-invites/ajouter'">Ajouter un joueur invité</button><br>
+            <br>
+            <h3>Joueurs réguliers</h3>
+            ${rows.join("")}
+            <h3>Joueurs invités</h3>
+            ${invitesRows.length > 0 ? invitesRows.join("") : `<div class="result-box">Aucun joueur invité pour le moment.</div>`}
+            
+            <div id="zoomOverlay" class="zoom-overlay" onclick="fermerZoomJoueur()">
+                <div id="zoomBox" class="zoom-box" onclick="event.stopPropagation()"></div>
+            </div>
 
-        <h3>Joueurs réguliers</h3>
-        ${rows.join("")}
+            <script>
+                function ouvrirZoomCarteJoueur(el) {
+                    const overlay = document.getElementById("zoomOverlay");
+                    const box = document.getElementById("zoomBox");
+                    if (!overlay || !box || !el) return;
+                    const image = el.dataset.image || "";
+                    const nom = el.dataset.nom || "";
+                    const etoiles = el.dataset.etoiles || "";
+                    box.innerHTML = "<div class='zoomed-player-card'>" +
+                        (image ? "<img src='" + image + "' alt='Carte joueur'><br>" : "") +
+                        "<div class='nom'>" + nom + "</div>" +
+                        (etoiles ? "<div style='margin-top:8px; font-size:1.1em;'>" + etoiles + "</div>" : "") +
+                        "</div>";
+                    overlay.classList.add("show");
+                }
 
-        <h3>Joueurs invités</h3>
-        ${
-            invitesRows.length > 0
-                ? invitesRows.join("")
-                : `<div class="result-box">Aucun joueur invité pour le moment.</div>`
-        }
+                function fermerZoomJoueur() {
+                    const overlay = document.getElementById("zoomOverlay");
+                    if (overlay) overlay.classList.remove("show");
+                }
 
-        <div id="zoomOverlay" class="zoom-overlay" onclick="fermerZoomJoueur()">
-          <div class="zoom-box" id="zoomBox" onclick="event.stopPropagation()"></div>
-        </div>
+                function ouvrirZoomSouvenir(src, nom) {
+                    const overlay = document.getElementById("zoomOverlay");
+                    const box = document.getElementById("zoomBox");
+                    if (!overlay || !box) return;
+                    box.innerHTML = "<div class='zoomed-player-card'>" +
+                        "<img src='" + src + "' alt='Souvenir de " + nom + "'><br>" +
+                        "<div class='nom'>Souvenir — " + nom + "</div>" +
+                        "</div>";
+                    overlay.classList.add("show");
+                }
 
-        <script>
-        function ouvrirZoomCarteJoueur(el) {
-          const overlay = document.getElementById("zoomOverlay");
-          const box = document.getElementById("zoomBox");
-          if (!overlay || !box || !el) return;
-
-          const image = el.dataset.image || "";
-          const nom = el.dataset.nom || "";
-          const etoiles = el.dataset.etoiles || "";
-
-          box.innerHTML =
-            "<div class='zoomed-player-card'>" +
-              (image ? "<img src='" + image + "' alt='Carte joueur'><br>" : "") +
-              "<div class='nom'>" + nom + "</div>" +
-              (etoiles ? "<div style='margin-top:8px; font-size:1.1em;'>" + etoiles + "</div>" : "") +
-            "</div>";
-
-          overlay.classList.add("show");
-        }
-
-        function fermerZoomJoueur() {
-          const overlay = document.getElementById("zoomOverlay");
-          if (overlay) overlay.classList.remove("show");
-        }
-
-        function ouvrirZoomSouvenir(src, nom) {
-          const overlay = document.getElementById("zoomOverlay");
-          const box = document.getElementById("zoomBox");
-          if (!overlay || !box) return;
-
-          box.innerHTML =
-            "<div class='zoomed-player-card'>" +
-              "<img src='" + src + "' alt='Souvenir de " + nom + "'><br>" +
-              "<div class='nom'>Souvenir — " + nom + "</div>" +
-            "</div>";
-
-          overlay.classList.add("show");
-        }
-
-        document.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") fermerZoomJoueur();
-        });
-        </script>
-
-        <a href="/menu">⬅ Retour</a>
+                document.addEventListener("keydown", (e) => { if (e.key === "Escape") fermerZoomJoueur(); });
+            </script>
+            <a href="/menu">⬅ Retour</a>
         `;
 
         res.send(renderPage("Joueurs", html));
     } catch (err) {
+        console.error(err);
         res.send(renderPage("Erreur", err.message));
     }
 });
+
 
 app.get("/joueurs/ajouter", requireAuth, (req, res) => {
     const html = `
