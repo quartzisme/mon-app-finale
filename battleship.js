@@ -3,6 +3,7 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
   const BASE_SHOTS = 3;
   const EXTRA_SHOTS_IF_HIT = 2;
   const UFO_BONUS_NEXT_TURN = 3;
+  const OPTIONAL_VICTORY_CODES = new Set(['ufo', 'diver', 'island']);
 
   const FLEET = [
     { code: 'ship', label: 'Bateau', emoji: '🚢', size: 5 },
@@ -30,6 +31,143 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
   const currentSlot = party => party.current_turn === 'p2' ? 'p2' : 'p1';
   const otherSlot = slot => slot === 'p1' ? 'p2' : 'p1';
   const bankField = slot => slot === 'p1' ? 'bonus_bank_p1' : 'bonus_bank_p2';
+
+  const battleTheme = () => `
+    <style>
+      body {
+        background: #000 !important;
+        color: #f4f4f4;
+      }
+
+      .page-container {
+        background: #050505 !important;
+        color: #f4f4f4;
+        box-shadow: 0 0 18px rgba(255,255,255,0.08);
+      }
+
+      h1, h2, h3, h4, b, strong, a {
+        color: #f4f4f4;
+      }
+
+      .result-box {
+        background: #111 !important;
+        border-left: 5px solid #2b7cff;
+        color: #f4f4f4;
+      }
+
+      input, select, textarea, button {
+        background: #161616;
+        color: #f4f4f4;
+        border: 1px solid #333;
+      }
+
+      button:hover {
+        background: #1f1f1f;
+      }
+
+      .battle-layout {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 18px;
+        align-items: start;
+      }
+
+      .battle-panel {
+        background: #0d0d0d;
+        border: 1px solid #222;
+        border-radius: 16px;
+        padding: 14px;
+        min-height: 100%;
+      }
+
+      .battle-panel h3 {
+        margin-top: 0;
+        min-height: 34px;
+      }
+
+      .battle-grid {
+        display: grid;
+        grid-template-columns: repeat(${GRID_SIZE}, minmax(34px, 1fr));
+        gap: 4px;
+        max-width: 460px;
+      }
+
+      .battle-cell,
+      .battle-cell-action {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        border: 1px solid #2a2a2a;
+        border-radius: 10px;
+        background: #101820;
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .battle-cell-action {
+        width: 100%;
+        max-width: none;
+        padding: 8px 0;
+        cursor: pointer;
+      }
+
+      .battle-cell.hit-cell,
+      .battle-cell.sunk-cell,
+      .battle-cell.ufo-cell,
+      .battle-cell.miss-cell {
+        background: #151515;
+      }
+
+      .battle-miss-hidden .miss-cell .miss-emoji {
+        visibility: hidden;
+      }
+
+      .battle-miss-hidden .miss-cell {
+        background: #0e1720;
+      }
+
+      .battle-fleet-layout {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 18px;
+      }
+
+      .battle-fleet-card {
+        background: #0d0d0d;
+        border: 1px solid #222;
+        border-radius: 16px;
+        padding: 14px;
+      }
+
+      .battle-top-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 12px 0;
+      }
+
+      .battle-turn-box {
+        background: #101010;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin-top: 8px;
+      }
+
+      .battle-note {
+        color: #cfcfcf;
+        font-size: 0.95em;
+      }
+
+      .jeux-table th,
+      .jeux-table td {
+        background: #111;
+        color: #f4f4f4;
+        border-color: #333;
+      }
+    </style>
+  `;
 
   function shuffle(array) {
     const copy = [...array];
@@ -71,7 +209,6 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
           label: piece.label,
           emoji: piece.emoji,
           size: piece.size,
-          cells,
           hits: [],
           sunk: false,
           dodge_used: false
@@ -129,8 +266,10 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
     return BASE_SHOTS + (party.hit_registered_this_turn ? EXTRA_SHOTS_IF_HIT : 0) + Number(party.extra_shots_this_turn || 0);
   }
 
-  function allSunk(board) {
-    return (board.ships || []).every(ship => ship.sunk);
+  function allVictoryTargetsDestroyed(board) {
+    return (board.ships || [])
+      .filter(ship => !OPTIONAL_VICTORY_CODES.has(ship.code))
+      .every(ship => ship.sunk);
   }
 
   function myName(party, slot, names) {
@@ -309,8 +448,8 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
       logEvent(party, 'ufo_bonus', `🛸 UFO abattu ! ${shooterName} gagnera ${UFO_BONUS_NEXT_TURN} tirs bonus à son prochain tour.`);
     }
 
-    if (allSunk(targetBoard)) {
-      logEvent(party, 'win', `🏆 ${shooterName} remporte la partie !`);
+    if (allVictoryTargetsDestroyed(targetBoard)) {
+      logEvent(party, 'win', `🏆 ${shooterName} remporte la partie ! Les cibles principales sont toutes détruites.`);
       return { winnerSlot: slot, endTurn: false };
     }
 
@@ -374,21 +513,22 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
     const pieceCode = board.occupied?.[key];
     const ship = pieceCode ? shipOn(board, pieceCode) : null;
     if (shot) {
-      if (shot.result === 'ufo_dodge') return '🌀';
-      if (shot.result === 'miss') return '⚪';
-      return ship?.sunk ? '💀' : '💥';
+      if (shot.result === 'ufo_dodge') return { emoji: '🌀', className: 'ufo-cell' };
+      if (shot.result === 'miss') return { emoji: '⚪', className: 'miss-cell' };
+      return { emoji: ship?.sunk ? '💀' : '💥', className: ship?.sunk ? 'sunk-cell' : 'hit-cell' };
     }
-    return ship ? ship.emoji : '💦';
+    return { emoji: ship ? ship.emoji : '💦', className: '' };
   }
 
   function enemyCell(shots, targetBoard, x, y) {
     const key = keyOf(x, y);
     const shot = (shots || []).find(s => s.key === key);
-    if (!shot) return '💦';
-    if (shot.result === 'ufo_dodge') return '🌀';
-    if (shot.result === 'miss') return '⚪';
+    if (!shot) return { emoji: '💦', className: '' };
+    if (shot.result === 'ufo_dodge') return { emoji: '🌀', className: 'ufo-cell' };
+    if (shot.result === 'miss') return { emoji: '⚪', className: 'miss-cell' };
     const ship = shot.piece_code ? shipOn(targetBoard, shot.piece_code) : null;
-    return ship?.sunk || shot.result === 'sunk' ? '💀' : '💥';
+    const sunk = ship?.sunk || shot.result === 'sunk';
+    return { emoji: sunk ? '💀' : '💥', className: sunk ? 'sunk-cell' : 'hit-cell' };
   }
 
   function fleetSummary(board) {
@@ -397,23 +537,31 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
       label: ship.label,
       hits: (ship.hits || []).length,
       size: ship.size,
-      sunk: ship.sunk
+      sunk: ship.sunk,
+      optional: OPTIONAL_VICTORY_CODES.has(ship.code)
     }));
   }
 
   function renderGrid({ own, ownBoard, targetBoard, ownShots, enemyShots, action }) {
-    let html = `<div style="display:grid;grid-template-columns:repeat(${GRID_SIZE}, minmax(34px,1fr));gap:4px;max-width:460px;">`;
+    let html = `<div class="battle-grid">`;
     for (let y = 0; y < GRID_SIZE; y += 1) {
       for (let x = 0; x < GRID_SIZE; x += 1) {
-        const emoji = own ? ownerCell(ownBoard, enemyShots, x, y) : enemyCell(ownShots, targetBoard, x, y);
-        if (!own && emoji === '💦' && action) {
+        const cell = own
+          ? ownerCell(ownBoard, enemyShots, x, y)
+          : enemyCell(ownShots, targetBoard, x, y);
+
+        const emojiHtml = cell.className === 'miss-cell'
+          ? `<span class="miss-emoji">${cell.emoji}</span>`
+          : cell.emoji;
+
+        if (!own && cell.emoji === '💦' && action) {
           html += `<form method="POST" action="${action}" style="margin:0;">
             <input type="hidden" name="x" value="${x}">
             <input type="hidden" name="y" value="${y}">
-            <button type="submit" style="width:100%;max-width:none;padding:8px 0;font-size:22px;line-height:1;">${emoji}</button>
+            <button type="submit" class="battle-cell-action">${emojiHtml}</button>
           </form>`;
         } else {
-          html += `<div style="display:flex;align-items:center;justify-content:center;min-height:42px;border:1px solid #d0d7de;border-radius:10px;background:#f8fbff;font-size:22px;">${emoji}</div>`;
+          html += `<div class="battle-cell ${cell.className}">${emojiHtml}</div>`;
         }
       }
     }
@@ -423,10 +571,11 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
 
   function renderFleetBoxes(summary) {
     return `<div style="display:flex;flex-wrap:wrap;gap:10px;">${summary.map(item => `
-      <div class="result-box" style="margin:0;padding:8px 10px;min-width:135px;">
+      <div class="result-box" style="margin:0;padding:8px 10px;min-width:140px;">
         <div><b>${item.emoji} ${escapeHtml(item.label)}</b></div>
         <div>Touches : ${item.hits}/${item.size}</div>
         <div>${item.sunk ? '💀 Coulé' : '💦 En vie'}</div>
+        <div class="battle-note">${item.optional ? 'Cible bonus' : 'Cible requise'}</div>
       </div>`).join('')}</div>`;
   }
 
@@ -451,6 +600,12 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
         const bank={hit:[[520,0.12],[720,0.16]],sunk:[[240,0.12],[180,0.14],[120,0.22]],miss:[[300,0.10]],ufo_dodge:[[860,0.08],[980,0.08],[1220,0.12]],ufo_bonus:[[700,0.08],[900,0.10],[1200,0.16]],win:[[660,0.10],[880,0.12],[1100,0.18]]}[fx]||[[440,0.10]];
         let offset=0; bank.forEach(([f,d])=>{ setTimeout(()=>beep(f,d),offset); offset+=110; });
       })();
+
+      function toggleMisses(button) {
+        document.body.classList.toggle('battle-miss-hidden');
+        const hidden = document.body.classList.contains('battle-miss-hidden');
+        if (button) button.textContent = hidden ? '🔓 Libéré' : '⚪ Voir les manqués';
+      }
     </script>`;
   }
 
@@ -471,8 +626,10 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
       }
 
       const html = `
+        ${battleTheme()}
         <h2>⚓ Battleship</h2>
         <div class="result-box"><b>V1 :</b> placement automatique, 1v1 pass-and-play, mode solo avec IA simple, UFO avec esquive 50% une fois et bonus de ${UFO_BONUS_NEXT_TURN} tirs au prochain tour.</div>
+        <div class="result-box"><b>Victoire :</b> la partie se termine quand toutes les cibles principales sont détruites. Le UFO, le plongeur et l’île secrète sont des cibles bonus.</div>
         <button onclick="window.location.href='/battleship/nouvelle'">➕ Nouvelle partie</button><br>
         <button onclick="window.location.href='/battleship/stats'">📈 Mini statistiques</button><br><br>
         <a href="/menu">⬅ Retour</a><br><br>
@@ -507,6 +664,7 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
     try {
       const joueurs = await fetchPlayablePlayers();
       const html = `
+        ${battleTheme()}
         <h2>➕ Nouvelle partie Battleship</h2>
         <div class="result-box">
           <form method="POST" action="/battleship/nouvelle">
@@ -611,42 +769,57 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
       const myShots = getShots(party, slot);
       const enemyShots = getShots(party, opponent);
       const maxShots = party.statut === 'terminee' ? 0 : maxShotsThisTurn(party);
+      const remainingShots = party.statut === 'terminee' ? 0 : Math.max(0, maxShots - Number(party.shots_used_this_turn || 0));
       const logs = Array.isArray(party.log) ? party.log.slice(0, 20) : [];
       const winnerName = party.gagnant_joueur_id ? (names[party.gagnant_joueur_id] || 'Gagnant') : '';
       const maskMode = String(req.query.mask || '') === '1';
       const fx = logs[0]?.type || '';
 
       const html = `
+        ${battleTheme()}
         <h2>⚓ Battleship #${party.id}</h2>
 
         <div class="result-box">
           <div><b>Mode :</b> ${party.mode === 'solo' ? '🤖 Solo' : '🆚 1v1'}</div>
           <div><b>Joueurs :</b> ${escapeHtml(names[party.joueur_1_id] || 'Joueur 1')} vs ${escapeHtml(isSolo(party) ? (party.nom_bot || 'Système') : (names[party.joueur_2_id] || 'Joueur 2'))}</div>
           <div><b>État :</b> ${party.statut === 'terminee' ? '🏁 Terminée' : '🎯 En cours'}</div>
-          ${party.statut === 'terminee' ? `<div><b>Gagnant :</b> ${escapeHtml(winnerName)}</div>` : `<div><b>Tour actuel :</b> ${escapeHtml(me)}</div><div><b>Tirs :</b> ${party.shots_used_this_turn} / ${maxShots}</div>`}
+          ${party.statut === 'terminee'
+            ? `<div><b>Gagnant :</b> ${escapeHtml(winnerName)}</div>`
+            : `<div><b>Tour actuel :</b> ${escapeHtml(me)}</div>
+               <div class="battle-turn-box"><b>Tirs joués :</b> ${party.shots_used_this_turn} / ${maxShots}<br><b>Tirs restants avant le tour adverse :</b> ${remainingShots}</div>
+               <div class="battle-note" style="margin-top:8px;">3 tirs de base. Si tu touches une cible, ton tour peut monter jusqu’à 5 tirs. Le UFO détruit donne ${UFO_BONUS_NEXT_TURN} tirs au prochain tour. Le UFO, le plongeur et l’île secrète sont des cibles bonus.</div>`}
         </div>
 
         ${party.statut !== 'terminee' ? `
-          <div class="result-box">
+          <div class="battle-top-actions">
             <button onclick="window.location.href='/battleship/partie/${party.id}?mask=1'">🙈 Masquer l'écran avant de passer l'appareil</button>
+            <button type="button" onclick="toggleMisses(this)">🔓 Libéré</button>
           </div>
         ` : ''}
 
-        <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
-          <div>
-            <h3>🛡️ Ta grille — ${escapeHtml(me)}</h3>
+        <div class="battle-layout">
+          <section class="battle-panel">
+            <h3>🛡️ Ma grille (${escapeHtml(me)})</h3>
             ${renderGrid({ own: true, ownBoard: myBoard, enemyShots })}
-          </div>
-          <div>
-            <h3>🎯 Grille adverse — ${escapeHtml(foe)}</h3>
+          </section>
+          <section class="battle-panel">
+            <h3>🎯 Grille adverse</h3>
             ${renderGrid({ own: false, targetBoard: enemyBoardData, ownShots: myShots, action: party.statut === 'terminee' ? '' : `/battleship/tirer/${party.id}` })}
-          </div>
+          </section>
         </div>
 
-        <h3>État de ta flotte</h3>
-        ${renderFleetBoxes(fleetSummary(myBoard))}
+        <div class="battle-fleet-layout" style="margin-top:18px;">
+          <section class="battle-fleet-card">
+            <h3>🧩 Mon état de la flotte</h3>
+            ${renderFleetBoxes(fleetSummary(myBoard))}
+          </section>
+          <section class="battle-fleet-card">
+            <h3>🎯 État de la flotte adverse</h3>
+            ${renderFleetBoxes(fleetSummary(enemyBoardData))}
+          </section>
+        </div>
 
-        <h3>Journal de bord</h3>
+        <h3>📜 Journal de bord</h3>
         <div class="result-box">
           ${logs.length ? logs.map(entry => `<div style="margin-bottom:6px;">${escapeHtml(entry.message)}</div>`).join('') : 'Aucun événement.'}
         </div>
@@ -661,7 +834,7 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
 
         <a href="/battleship">⬅ Retour</a>
 
-        ${maskMode ? `<div id="maskScreen" style="position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:30px;"><div style="background:white;border-radius:18px;padding:24px;max-width:480px;text-align:center;"><div style="font-size:2.2em;">🙈</div><h3>Passe l'appareil à l'autre joueur</h3><p>Quand tout le monde est prêt, clique ci-dessous.</p><button onclick="document.getElementById('maskScreen').remove()">Reprendre la partie</button></div></div>` : ''}
+        ${maskMode ? `<div id="maskScreen" style="position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:30px;"><div style="background:white;border-radius:18px;padding:24px;max-width:480px;text-align:center;color:black;"><div style="font-size:2.2em;">🙈</div><h3 style="color:black;">Passe l'appareil à l'autre joueur</h3><p>Quand tout le monde est prêt, clique ci-dessous.</p><button onclick="document.getElementById('maskScreen').remove()">Reprendre la partie</button></div></div>` : ''}
         ${renderFxScript(fx)}
       `;
       res.send(renderPage(`Battleship #${party.id}`, html));
@@ -707,8 +880,8 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
   app.post('/battleship/etoile/:id', requireAuth, async (req, res) => {
     try {
       const party = await fetchParty(req.params.id);
-      await addStarIfNeeded(party);
-      if (party.gagnant_joueur_id) {
+      const added = await addStarIfNeeded(party);
+      if (added && party.gagnant_joueur_id) {
         await bumpStats(party.gagnant_joueur_id, { etoiles_battleship: 1 });
       }
       res.redirect(`/battleship/partie/${party.id}`);
@@ -736,6 +909,7 @@ export default function registerBattleshipRoutes({ app, supabase, requireAuth, r
       if (error) throw error;
 
       const html = `
+        ${battleTheme()}
         <h2>📈 Mini statistiques Battleship</h2>
         ${!(stats || []).length ? `<div class="result-box">Aucune statistique Battleship pour le moment.</div>` : `
           <div class="table-wrap">
