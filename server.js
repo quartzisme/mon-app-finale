@@ -632,7 +632,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
-          <div style="color:#666; font-size: 10px;"> ver 2026.04.03a</div>
+          <div style="color:#666; font-size: 10px;"> ver 2026.04.04</div>
         </div>
       </form>
     </div>
@@ -1368,9 +1368,11 @@ app.get("/joueurs/liste", requireAuth, async (req, res) => {
 
         const html = `
             <h2>👥 Gestion des joueurs</h2>
-            <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button>
+            <button onclick="window.location.href='/joueurs/ajouter'">Ajouter un joueur</button><br>
             <button onclick="window.location.href='/joueurs-invites/ajouter'">Ajouter un joueur invité</button><br>
             <br>
+            <a href="/menu">⬅ Retour</a>
+
             <h3>Joueurs réguliers</h3>
             ${rows.join("")}
             <h3>Joueurs invités</h3>
@@ -2055,19 +2057,19 @@ app.get("/scores/ajouter", requireAuth, async (req, res) => {
 <div class="result-box">
 <form method="POST" action="/scores/ajouter" id="formScore">
 
-<label>Jeu :</label>
+<label>⚔️ Jeu :</label>
 <select name="jeu_id" required>
 <option value="">-- Choisir un jeu --</option>
 ${jeux.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
 </select><br>
 
-<label>Joueur :</label>
+<label>👤 Joueur :</label>
 <select name="joueur_id" required>
 <option value="">-- Choisir un joueur --</option>
 ${joueurs.map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
 </select><br>
 
-<label>Score :</label>
+<label>⭐ Score :</label>
 <input type="number" step="0.5" min="0" max="10" name="score" id="champScore" required><br>
 <div id="aideScore" style="font-size:0.72em; color:#666; line-height:1.2; margin:2px 0 10px 2px; font-style:italic; opacity:0.95;"></div>
 
@@ -2483,7 +2485,7 @@ app.get("/stats", requireAuth, async (req, res) => {
         <h2>🥇 Top jeux 💀</h2>
 
         <form id="formStats" class="result-box">
-          Choisir joueur:<br>
+          👤 Choisir joueur:<br>
           <select name="joueur" id="choixJoueur">
             <option value="">-- Choisir --</option>
             ${vincent ? `<option value="${vincent.id}">${escapeHtml(vincent.nom)}</option>` : ""}
@@ -2496,7 +2498,7 @@ app.get("/stats", requireAuth, async (req, res) => {
           </select>
           <br>
 
-          Nombre de jeux à afficher:<br>
+          ⅀ Nombre de jeux à afficher:<br>
           <input type="number" id="nbTop" value="5" min="1" max="50" style="width:90px;">
         </form>
 
@@ -2811,19 +2813,19 @@ app.get("/filtrages", requireAuth, async (req, res) => {
             <input type="number" name="tempsmax" min="0" style="width:110px;">
             <label>(min.)</label><br>
 
-            <label>⭐ Score moyen minimum (joueurs) :</label>
+            <label>⭐ Score moyen min. (joueurs) :</label>
             <input type="number" step="0.1" name="scoremin" min="0" style="width:90px;"><br>
 
-            <label><span style="color:#1e88e5; font-size:1.2em;">⬢</span> Score moyen minimum BGG :</label>
+            <label><span style="color:#1e88e5; font-size:1.2em;">⬢</span> Score moyen min. BGG :</label>
             <input type="number" step="0.1" name="bggmin" min="0" max="10" style="width:90px;"><br>
 
-            <label>ℹ️ Status :</label><br>
+            <label>ℹ️ Status :</label>
             <select name="status" style="width:80px;">
               <option value=""></option>
               <option value="Oui">Oui</option>
             </select><br>
 
-            <label>🔗 Extension :</label><br>
+            <label>🔗 Extension :</label>
             <select name="extension" style="width:80px;">
               <option value=""></option>
               <option value="Oui">Oui</option>
@@ -3059,7 +3061,7 @@ app.get("/competitions/liste", requireAuth, async (req, res) => {
                             </form>
                             `;
                         } else if (estGagnant) {
-                            html += `<b>🏅 Gagnant</b>`;
+                            html += `<b>🏅</b>`;
                         }
 
                         html += `
@@ -3137,13 +3139,13 @@ app.get("/competitions/ajouter", requireAuth, async (req, res) => {
                     ${(jeux || []).map(j => `<option value="${j.id}">${escapeHtml(j.nom)}</option>`).join("")}
                 </select><br>
 
-                Nombre de joueurs :<br>
+                👥 Nombre de joueurs :<br>
                 <input type="number" id="nbJoueurs" name="nb_joueurs" min="2" value="2" required><br>
 
-                Combien de victoires pour gagner :<br>
+                ⭐ Combien de victoires pour gagner :<br>
                 <input type="number" name="victoires_pour_gagner" min="1" value="3" required><br>
 
-                Description / objectif :<br>
+                ℹ️ Description / objectif :<br>
                 <textarea name="objectif" rows="4"></textarea><br><br>
 
                 <div id="zoneJoueurs"></div>
@@ -3165,7 +3167,7 @@ app.get("/competitions/ajouter", requireAuth, async (req, res) => {
 
             for (let i = 0; i < nb; i++) {
                 html += \`
-                    Joueur \${i + 1} :<br>
+                    👤 Joueur \${i + 1} :<br>
                     <select name="joueur_ids[]" required>
                         <option value="">-- Choisir --</option>
                         \${joueurs.map(j => \`<option value="\${j.id}">\${j.nom}</option>\`).join("")}
@@ -3567,26 +3569,26 @@ app.get("/jeux-en-cours", requireAuth, async (req, res) => {
 
         <div class="result-box">
             <form method="POST" action="/jeux-en-cours/ajouter" enctype="multipart/form-data">
-                Jeu:<br>
+                ⚔️ Jeu:<br>
                 <select name="nom_jeu" required>
                     <option value="">-- Choisir un jeu --</option>
                     ${(jeux || []).map(j => `<option value="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
                 </select><br>
 
-                Joueurs impliqués:<br>
+                👥 Joueurs impliqués:<br>
                 <select name="joueur_ids[]" id="joueurs_en_cours" multiple size="6" style="max-width:400px;" required>
                     ${(joueurs || []).map(j => `<option value="${j.id}" data-nom="${escapeHtml(j.nom)}">${escapeHtml(j.nom)}</option>`).join("")}
                 </select><br>
 
-                Tour à quel joueur de jouer:<br>
+                ↻ Tour à quel joueur de jouer:<br>
                 <select name="prochain_joueur" id="prochain_joueur" style="max-width:220px;">
                     <option value="">-- Choisir --</option>
                 </select><br>            
 
-                Photo:<br>
+                📷 Photo:<br>
                 <input type="file" name="photo" accept="image/*"><br>
 
-                Notes:<br>
+                ℹ️ Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
 
                 <button>Ajouter</button>
@@ -3966,20 +3968,20 @@ app.get("/jeux-desires", requireAuth, async (req, res) => {
             <h3>➕ Ajouter un jeu désiré</h3>
 
             <form method="POST" action="/jeux-desires/ajouter">
-                Nom du jeu:<br>
+                ⚔️ Nom du jeu:<br>
                 <input name="nom" required><br>
 
-                Extension:<br>
+                🔗 Extension:<br>
                 <input name="extension"><br>
 
-                Quelle source (magasin):<br>
+                ⦿ Quelle source (magasin):<br>
                 <input name="source_magasin"><br>
 
-                Prix d'achat:<br>
+                💰 Prix d'achat:<br>
                 <input type="number" name="prix_achat" min="0" step="0.01" style="max-width:140px;" placeholder="0.00"><br>
                 <div style="font-size:0.78em; color:#666; margin-top:2px;">Format affiché : 20,00 $</div><br>
 
-                Notes:<br>
+                ℹ️ Notes:<br>
                 <textarea name="notes" rows="4"></textarea><br><br>
 
                 <button>Ajouter</button>
