@@ -1622,6 +1622,7 @@ app.get("/joueurs-invites/ajouter", requireAuth, async (req, res) => {
         if (error) throw error;
 
         const html = `
+        <br>
         <h2>Ajouter un joueur invité</h2>
 
         <div class="result-box">
@@ -1694,6 +1695,145 @@ app.post("/joueurs-invites/ajouter", requireAuth, async (req, res) => {
     }
 });
 
+app.get("/joueurs-invites/modifier/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data: invite, error: inviteError } = await supabase
+            .from("joueurs_invites")
+            .select("id, nom")
+            .eq("id", id)
+            .single();
+
+        if (inviteError) throw inviteError;
+        if (!invite) {
+            return res.send(renderPage("Erreur", "Joueur invité introuvable."));
+        }
+
+        const { data: jeux, error: jeuxError } = await supabase
+            .from("jeux")
+            .select("id, nom")
+            .order("nom");
+
+        if (jeuxError) throw jeuxError;
+
+        const { data: liens, error: liensError } = await supabase
+            .from("joueurs_invites_jeux")
+            .select("id, jeu_id, appreciation")
+            .eq("joueur_invite_id", id)
+            .order("id", { ascending: true });
+
+        if (liensError) throw liensError;
+
+        const lienActuel = (liens || [])[0] || null;
+
+        const html = `
+        <h2>✏ Modifier un joueur invité</h2>
+
+        <div class="result-box">
+            <form method="POST" action="/joueurs-invites/modifier/${invite.id}">
+                Nom du joueur invité:<br>
+                <input name="nom" value="${escapeHtml(invite.nom || "")}" required><br>
+
+                Jeu joué:<br>
+                <select name="jeu_id" required>
+                    <option value="">-- Choisir un jeu --</option>
+                    ${(jeux || []).map(j => `
+                        <option value="${j.id}" ${Number(lienActuel?.jeu_id) === Number(j.id) ? "selected" : ""}>
+                            ${escapeHtml(j.nom)}
+                        </option>
+                    `).join("")}
+                </select><br>
+
+                A-t-il aimé le jeu?<br>
+                <select name="appreciation" required style="max-width:220px;">
+                    <option value="">-- Choisir --</option>
+                    <option value="oui" ${lienActuel?.appreciation === "oui" ? "selected" : ""}>Oui</option>
+                    <option value="moyen" ${lienActuel?.appreciation === "moyen" ? "selected" : ""}>Moyen</option>
+                    <option value="non" ${lienActuel?.appreciation === "non" ? "selected" : ""}>Non</option>
+                </select><br><br>
+
+                <button>Enregistrer</button>
+            </form>
+        </div>
+
+        <a href="/joueurs/liste">⬅ Retour</a>
+        `;
+
+        res.send(renderPage("Modifier joueur invité", html));
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/joueurs-invites/modifier/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const nom = (req.body.nom || "").trim();
+        const jeu_id = Number(req.body.jeu_id);
+        const appreciation = (req.body.appreciation || "").trim().toLowerCase();
+
+        if (!nom) {
+            return res.send(renderPage("Erreur", "Le nom du joueur invité est requis."));
+        }
+
+        if (!jeu_id || !["oui", "moyen", "non"].includes(appreciation)) {
+            return res.send(renderPage("Erreur", "Les informations sont invalides."));
+        }
+
+        const { error: updateInviteError } = await supabase
+            .from("joueurs_invites")
+            .update({ nom })
+            .eq("id", id);
+
+        if (updateInviteError) throw updateInviteError;
+
+        const { error: deleteLiensError } = await supabase
+            .from("joueurs_invites_jeux")
+            .delete()
+            .eq("joueur_invite_id", id);
+
+        if (deleteLiensError) throw deleteLiensError;
+
+        const { error: insertLienError } = await supabase
+            .from("joueurs_invites_jeux")
+            .insert([{
+                joueur_invite_id: Number(id),
+                jeu_id,
+                appreciation
+            }]);
+
+        if (insertLienError) throw insertLienError;
+
+        res.redirect("/joueurs/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
+
+app.post("/joueurs-invites/supprimer/:id", requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error: deleteLiensError } = await supabase
+            .from("joueurs_invites_jeux")
+            .delete()
+            .eq("joueur_invite_id", id);
+
+        if (deleteLiensError) throw deleteLiensError;
+
+        const { error: deleteInviteError } = await supabase
+            .from("joueurs_invites")
+            .delete()
+            .eq("id", id);
+
+        if (deleteInviteError) throw deleteInviteError;
+
+        res.redirect("/joueurs/liste");
+    } catch (err) {
+        res.send(renderPage("Erreur", err.message));
+    }
+});
 
 // ===================== Jeux =====================
 app.get("/jeux/modifier", requireAuth, async (req, res) => {
