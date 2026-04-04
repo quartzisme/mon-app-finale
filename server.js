@@ -10,7 +10,7 @@ import sharp from "sharp";
 
 import { supabase } from "./supabaseClient.js";
 
-
+import registerBattleshipRoutes from "./battleship.js";
 
 dotenv.config();
 
@@ -632,7 +632,7 @@ app.get("/", (req, res) => {
         <div class="login-actions">
           <button type="submit">Entrer</button>
           <button type="button" id="music-toggle" onclick="toggleMusic()">🔊</button>
-          <div style="color:#666; font-size: 10px;"> ver 2026.04.04</div>
+          <div style="color:#666; font-size: 10px;"> ver 2026.04.04b</div>
         </div>
       </form>
     </div>
@@ -668,8 +668,9 @@ app.get("/menu", requireAuth, (req, res) => {
             <li class="menu-item"><a href="/stats">🥇 Meilleurs / 💀 Pires jeux</a></li>
             <li class="menu-item"><a href="/filtrages">🔍 Filtrages</a></li>
             <li class="menu-item"><a href="/competitions/liste">🏆 Compétitions</a></li>
-            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours / en ligne</a></li>
+            <li class="menu-item"><a href="/jeux-en-cours">⏸️ Jeux en cours</a></li>
             <li class="menu-item"><a href="/jeux-desires">🛒 Jeux désirés</a></li>
+            <li class="menu-item"><a href="/battleship">⚓ Battleship</a></li>
             <li class="menu-item"><a href="/logout">⏻ Déconnexion</a></li>
           </div>
         </ul>
@@ -4048,8 +4049,17 @@ app.post("/jeux-desires/supprimer/:id", requireAuth, async (req, res) => {
     }
 });
 
+// ===================== Battleship ==================
+registerBattleshipRoutes({
+  app,
+  supabase,
+  requireAuth,
+  renderPage,
+  escapeHtml
+});
+
 // ===================== SERVEUR =====================
-// ===================== const PORT = process.env.PORT || 3000;
+
 // ===================== app.listen(PORT, () => console.log(`Serveur démarré sur http://localhost:${PORT}`));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
